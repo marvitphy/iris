@@ -1,0 +1,11 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- round icon body (transparent outside so it reads as a circle in the taskbar) -->
+  <circle cx="256" cy="256" r="248" fill="#0D0B12"/>
+  <!-- aperture ring: violet stroke with one clean gap -->
+  <g transform="rotate(-52 256 256)">
+    <circle cx="256" cy="256" r="150" fill="none" stroke="#B06BFF" stroke-width="34"
+            stroke-linecap="round" stroke-dasharray="760 942"/>
+  </g>
+  <!-- pupil -->
+  <circle cx="256" cy="256" r="44" fill="#B06BFF"/>
+</svg>

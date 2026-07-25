@@ -1,0 +1,23 @@
+appId: app.iris.browser
+productName: Iris
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: dist-mcp/iris-mcp.mjs
+    to: iris-mcp.mjs
+  - from: skills/iris/SKILL.md
+    to: iris-skill/SKILL.md
+win:
+  target: nsis
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Iris

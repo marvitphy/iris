@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Iris, a browser your AI agent drives</title>
+<meta name="description" content="A minimalist, Windows-first Chromium browser your AI agent drives, and you drive too. For the logged-in web that no public API exposes." />
+<style>
+  :root {
+    --bg:#0b0910; --panel:rgba(255,255,255,.04); --line:rgba(255,255,255,.10);
+    --fg:#f1eff5; --muted:#9a94a8; --faint:#6e6880;
+    --violet:#b06bff; --coral:#ff8a6b;
+    --sans:ui-sans-serif,system-ui,'Segoe UI',Roboto,sans-serif;
+    --mono:ui-monospace,'Cascadia Code','JetBrains Mono',Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .amb{position:fixed;inset:0;z-index:-1;overflow:hidden;}
+  .amb::before,.amb::after{content:'';position:absolute;border-radius:50%;filter:blur(130px);opacity:.5;}
+  .amb::before{width:52vw;height:52vw;top:-16vw;left:-10vw;background:rgba(176,107,255,.28);}
+  .amb::after{width:48vw;height:48vw;bottom:-18vw;right:-12vw;background:rgba(255,138,107,.24);}
+  .wrap{max-width:720px;margin:0 auto;padding:0 24px;}
+  main{padding:92px 0 80px;}
+  .logo{display:flex;align-items:center;gap:12px;}
+  .logo svg{width:38px;height:38px;}
+  .logo b{font-size:22px;font-weight:680;letter-spacing:-.01em;}
+  h1{font-size:clamp(30px,5.5vw,46px);line-height:1.05;letter-spacing:-.02em;margin:34px 0 0;text-wrap:balance;}
+  h1 .g{background:linear-gradient(120deg,var(--violet),var(--coral));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  p.lede{color:var(--muted);font-size:18px;margin:18px 0 30px;max-width:56ch;}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
+  .btn{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:11px;background:var(--fg);color:#14121a;transition:transform .14s,box-shadow .14s;}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(0,0,0,.45);}
+  .btn.ghost{background:var(--panel);color:var(--fg);border:1px solid var(--line);}
+  .note{font-family:var(--mono);font-size:12.5px;color:var(--faint);}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.16em;color:var(--faint);margin:64px 0 20px;font-weight:600;}
+  .steps{display:grid;gap:14px;counter-reset:s;}
+  .step{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;}
+  .step .n{counter-increment:s;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--violet);background:rgba(176,107,255,.14);border:1px solid rgba(176,107,255,.28);}
+  .step .n::before{content:counter(s);}
+  .step .b{font-weight:600;}
+  .step .d{color:var(--muted);font-size:14.5px;margin-top:2px;}
+  code,.cmd{font-family:var(--mono);font-size:13px;}
+  .cmd{display:block;margin-top:8px;background:#000;border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:#e7e2f0;overflow-x:auto;white-space:pre;}
+  .caps{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  .cap{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 11px;}
+  footer{border-top:1px solid var(--line);margin-top:72px;padding:26px 0 60px;color:var(--faint);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  footer a{color:var(--muted);text-decoration:none;}
+  footer a:hover{color:var(--fg);}
+</style>
+</head>
+<body>
+<div class="amb"></div>
+<main class="wrap">
+  <div class="logo">
+    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B06BFF"/><stop offset="1" stop-color="#FF8A6B"/></linearGradient><clipPath id="cl"><circle cx="206" cy="256" r="120"/></clipPath></defs>
+      <circle cx="306" cy="256" r="120" fill="url(#g)" clip-path="url(#cl)"/>
+      <circle cx="206" cy="256" r="120" fill="none" stroke="#B06BFF" stroke-width="30"/>
+      <circle cx="306" cy="256" r="120" fill="none" stroke="#FF8A6B" stroke-width="30"/>
+    </svg>
+    <b>Iris</b>
+  </div>
+
+  <h1>The browser your <span class="g">AI agent</span> drives.<br/>And you drive too.</h1>
+  <p class="lede">A minimalist, Windows-first Chromium browser your coding agent operates through your real, logged-in sessions, for the web that no public API exposes. You watch live and take over anytime.</p>
+
+  <div class="cta">
+    <a class="btn" href="https://github.com/marvitphy/iris/releases/latest">Download for Windows</a>
+    <a class="btn ghost" href="https://github.com/marvitphy/iris">View on GitHub</a>
+  </div>
+  <p class="note" style="margin-top:14px;">Works with Claude Code, Cursor, Codex, any MCP client.</p>
+
+  <div class="caps">
+    <span class="cap">Spaces</span><span class="cap">real logins</span><span class="cap">activity trail</span>
+    <span class="cap">handoff</span><span class="cap">approval gates</span><span class="cap">local &amp; private</span>
+  </div>
+
+  <h2>Get started</h2>
+  <div class="steps">
+    <div class="step"><div class="n"></div><div><div class="b">Install Iris</div><div class="d">Download and run the installer above. On first launch it sets up the MCP server and installs the Iris skill for your agent automatically.</div></div></div>
+    <div class="step"><div class="n"></div><div><div class="b">Launch Iris and keep it open</div><div class="d">The agent connects to the running Iris window. Sign into the sites you want it to use, and your sessions persist.</div></div></div>
+    <div class="step"><div class="n"></div><div><div class="b">Add the MCP server to your agent</div><div class="d">In Claude Code, run:</div><code class="cmd">claude mcp add iris -- node %LOCALAPPDATA%\Iris\iris-mcp.mjs</code></div></div>
+    <div class="step"><div class="n"></div><div><div class="b">Restart your agent</div><div class="d">Restart Claude Code so it loads the Iris skill and the new tools.</div></div></div>
+    <div class="step"><div class="n"></div><div><div class="b">Tell it what to do</div><div class="d">“Research the top ticketing platforms and save me a CSV.” “Post this to X.” Anything you can do in a browser you're signed into.</div></div></div>
+  </div>
+
+  <h2>What you can do</h2>
+  <p class="lede" style="margin-top:0;">Deep research &amp; competitor analysis · social ops (X, LinkedIn, Reddit…) · SaaS back-office · internal admin panels · job applications · bookings. Anything behind a login that no API gives you.</p>
+
+  <footer>
+    <span>Iris · Windows-first · driven over MCP · everything local</span>
+    <a href="https://github.com/marvitphy/iris">github.com/marvitphy/iris</a>
+  </footer>
+</main>
+</body>
+</html>

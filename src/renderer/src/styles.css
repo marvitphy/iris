@@ -1,0 +1,344 @@
+:root {
+  --fg: #f0f0f4;
+  --muted: #9c9ca8;
+  --line: rgba(255, 255, 255, 0.09);
+  --field: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.07);
+  --active: rgba(255, 255, 255, 0.14);
+  --human: #4b8bff;
+  --agent: #b06bff;
+  --coral: #ff8a6b;
+  --faint: #6f6a80;
+  --sidebar: 248px;
+  --topbar: 44px;
+  --pad: 14px;
+  --ring: 5px;
+}
+
+/* minimalist scrollbars (renderer chrome only; site scrollbars belong to the page) */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.26); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--fg);
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.shell {
+  height: 100%;
+  background: rgba(255, 122, 96, 0.12);
+}
+
+/* shadow cast into the acrylic margin behind the site card */
+.card-shadow, .card-glow {
+  position: fixed;
+  left: calc(var(--sidebar) + var(--pad) + var(--ring));
+  top: calc(var(--topbar) + var(--pad) + var(--ring));
+  right: calc(var(--pad) + var(--ring));
+  bottom: calc(var(--pad) + var(--ring));
+  border-radius: 6px;
+  pointer-events: none;
+}
+.card-shadow { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22), 0 1px 5px rgba(0, 0, 0, 0.16); }
+
+/* agent-activity halo (ai-motion WebGL) overhanging the card into the acrylic margin */
+.nebula {
+  position: fixed;
+  left: calc(var(--sidebar) + var(--pad));
+  top: calc(var(--topbar) + var(--pad));
+  right: var(--pad);
+  bottom: var(--pad);
+  pointer-events: none;
+  overflow: hidden;
+}
+.nebula canvas { display: block; }
+
+/* attention frame (handoff / approval) — steady amber box-shadow behind the card */
+.card-glow { opacity: 0; transition: opacity 0.4s ease; }
+.card-glow.attn {
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(255, 176, 80, 0.85), 0 0 26px 3px rgba(255, 176, 80, 0.5);
+}
+
+/* ===== top bar ===== */
+.topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--topbar);
+  display: flex;
+  align-items: center;
+}
+
+.tb-left {
+  width: var(--sidebar); height: 100%;
+  display: flex; align-items: center; padding-left: 16px;
+  -webkit-app-region: drag;
+}
+.irismark { width: 24px; height: 24px; color: rgba(255, 255, 255, 0.92); }
+
+.tb-main {
+  flex: 1; height: 100%;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 6px 0 var(--pad);
+  -webkit-app-region: drag;
+}
+
+.nav { display: flex; gap: 2px; -webkit-app-region: no-drag; }
+.nav button {
+  width: 32px; height: 32px; border: none; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  display: grid; place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+.nav button:hover { background: var(--hover); color: var(--fg); }
+
+/* omnibox: a single subtle centered field, brighter on focus */
+.omni { flex: 1; display: flex; justify-content: center; -webkit-app-region: drag; }
+.omni input {
+  width: 100%; max-width: 560px; height: 32px; padding: 0 16px;
+  border: 1px solid transparent; border-radius: 9px;
+  background: var(--field); color: var(--fg); font-size: 12.5px; text-align: center; outline: none;
+  -webkit-app-region: no-drag;
+  transition: background 0.12s, border-color 0.12s;
+}
+.omni input::placeholder { color: var(--muted); }
+.omni input:hover { background: rgba(255, 255, 255, 0.11); }
+.omni input:focus {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(176, 107, 255, 0.45);
+  text-align: left;
+}
+
+/* always-visible "agent working / needs you" badge in the top bar */
+.agentbadge {
+  display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto;
+  height: 28px; padding: 0 12px; margin-right: 4px;
+  border: 1px solid rgba(176, 107, 255, 0.4); border-radius: 999px;
+  background: color-mix(in srgb, var(--agent) 14%, transparent);
+  color: #e6d6ff; font-size: 12px; font-weight: 600; cursor: pointer;
+  -webkit-app-region: no-drag;
+  animation: badgePulse 1.6s ease-in-out infinite;
+}
+.agentbadge .pl { width: 8px; height: 8px; border-radius: 50%; background: var(--agent); box-shadow: 0 0 8px var(--agent); }
+.agentbadge.needs {
+  border-color: rgba(255, 176, 80, 0.45);
+  background: color-mix(in srgb, #ffb050 15%, transparent);
+  color: #ffdca6;
+}
+.agentbadge.needs .pl { background: #ffb050; box-shadow: 0 0 8px #ffb050; }
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(176, 107, 255, 0); }
+  50% { box-shadow: 0 0 14px -2px rgba(176, 107, 255, 0.6); }
+}
+
+.winctl { display: flex; gap: 2px; padding: 0 8px 0 6px; -webkit-app-region: no-drag; }
+.wc {
+  width: 34px; height: 32px; border: none; border-radius: 8px; padding: 0;
+  background: transparent; color: var(--muted); cursor: pointer;
+  display: grid; place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+.wc:hover { background: var(--hover); color: var(--fg); }
+.wc.close:hover { background: #e03535; color: #fff; }
+
+/* ===== sidebar ===== */
+.sidebar {
+  position: fixed;
+  left: 0; top: var(--topbar); bottom: 0;
+  width: var(--sidebar);
+  display: flex; flex-direction: column;
+  padding: 10px 16px 16px;
+}
+
+.spacehead {
+  display: flex; align-items: center; gap: 10px;
+  height: 40px; padding: 0 10px; margin-bottom: 8px;
+  font-weight: 600; font-size: 13.5px; color: var(--fg);
+}
+.sdot { flex: 0 0 auto; width: 11px; height: 11px; border-radius: 50%; background: currentColor; }
+.sdot.human { color: var(--human); }
+.sdot.agent { color: var(--agent); }
+.shname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* autonomy toggle — when on, the agent acts without asking for approval */
+.autotoggle {
+  flex: 0 0 auto; width: 30px; height: 17px; padding: 0; border: none; cursor: pointer;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.14);
+  position: relative; transition: background 0.16s ease;
+}
+.autotoggle .knob {
+  position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%;
+  background: #fff; transition: transform 0.16s ease; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.autotoggle.on { background: var(--agent); }
+.autotoggle.on .knob { transform: translateX(13px); }
+.autotoggle:hover { filter: brightness(1.08); }
+
+/* handoff banner */
+.handoff {
+  display: flex; align-items: center; gap: 10px;
+  margin: 2px 0 10px; padding: 10px 12px;
+  border-radius: 11px;
+  background: rgba(255, 176, 80, 0.13);
+  border: 1px solid rgba(255, 176, 80, 0.32);
+}
+.htext { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.htext b { font-size: 12.5px; color: #ffd9a3; }
+.htext span { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.handoff button {
+  flex: 0 0 auto; border: none; border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  background: #ffb050; color: #2a1c00; font-size: 12px; font-weight: 600;
+  transition: filter 0.12s;
+}
+.handoff button:hover { filter: brightness(1.08); }
+
+/* approval banner */
+.approval {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 2px 0 10px; padding: 12px;
+  border-radius: 11px;
+  background: rgba(176, 107, 255, 0.13);
+  border: 1px solid rgba(176, 107, 255, 0.34);
+}
+.approval .htext b { color: #e6d6ff; }
+.apbtns { display: flex; gap: 8px; }
+.apbtns button {
+  flex: 1; border: none; border-radius: 8px; padding: 8px 10px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; transition: filter 0.12s, background 0.12s;
+}
+.apbtns .ok { background: var(--agent); color: #180a24; }
+.apbtns .ok:hover { filter: brightness(1.1); }
+.apbtns .no { background: rgba(255, 255, 255, 0.08); color: var(--fg); }
+.apbtns .no:hover { background: rgba(255, 255, 255, 0.14); }
+.shx {
+  flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center;
+  border-radius: 7px; color: var(--muted); opacity: 0; cursor: pointer;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.spacehead:hover .shx { opacity: 0.6; }
+.shx:hover { opacity: 1; background: rgba(255, 255, 255, 0.16); color: var(--fg); }
+
+.tablist { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; flex: 0 1 auto; max-height: 46%; }
+.tab {
+  display: flex; align-items: center; gap: 12px;
+  height: 40px; padding: 0 10px; border-radius: 10px; cursor: pointer; color: var(--muted);
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover { background: var(--hover); color: var(--fg); }
+.tab.active { background: var(--active); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22); }
+.fav {
+  flex: 0 0 22px; width: 22px; height: 22px; border-radius: 6px;
+  display: grid; place-items: center; overflow: hidden;
+}
+.favimg { width: 16px; height: 16px; border-radius: 4px; display: block; }
+.favletter {
+  width: 22px; height: 22px; border-radius: 6px;
+  display: grid; place-items: center; font-size: 11.5px; font-weight: 600;
+  background: rgba(255, 255, 255, 0.15); color: var(--fg);
+}
+.tabtitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+
+.tab .x, .spc .x {
+  flex: 0 0 auto; width: 24px; height: 24px;
+  display: grid; place-items: center; border-radius: 7px;
+  color: var(--muted); opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.tab:hover .x, .spc:hover .x, .tab.active .x { opacity: 0.6; }
+.tab .x:hover, .spc .x:hover { opacity: 1; background: rgba(255, 255, 255, 0.18); color: var(--fg); }
+
+.newtab {
+  margin-top: 4px; height: 40px; text-align: left; padding: 0 10px;
+  display: flex; align-items: center; gap: 12px;
+  border: none; border-radius: 10px; background: transparent; color: var(--muted);
+  font-size: 13px; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.newtab .plus { width: 22px; display: grid; place-items: center; }
+.newtab:hover { background: var(--hover); color: var(--fg); }
+
+.spacer { flex: 1; min-height: 12px; }
+
+/* agent activity trail — the human follows the research live */
+.activity { flex: 1 1 auto; min-height: 60px; display: flex; flex-direction: column; margin-top: 12px; }
+.acthead {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 10px; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--faint); padding: 0 8px 7px;
+}
+.actlist { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.act {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 8px; border-radius: 8px; font-size: 12px; color: var(--muted);
+}
+.act:hover { background: var(--hover); }
+.actdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; background: currentColor; }
+.actdot.k-search { color: var(--coral); }
+.actdot.k-visit { color: var(--agent); }
+.actdot.k-tab { color: var(--human); }
+.actdot.k-read { color: var(--faint); }
+.acttext { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acttext b { color: var(--fg); font-weight: 600; margin-right: 3px; }
+.actat { flex: 0 0 auto; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.actempty { padding: 8px; font-size: 12px; color: var(--faint); line-height: 1.5; }
+
+/* space rail: compact avatars, one per Space (name lives in the header) */
+.spaces {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line);
+}
+.spc {
+  width: 34px; height: 34px; border: none; border-radius: 10px; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 0.14s, box-shadow 0.14s, transform 0.14s, color 0.14s;
+}
+.spc.human { color: #7aa8ff; }
+.spc.agent { color: #c393ff; }
+.spc:hover { background: rgba(255, 255, 255, 0.11); transform: translateY(-1px); }
+.spc.active {
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 60%, transparent);
+}
+.spc.add {
+  color: var(--muted);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  margin-left: auto;
+}
+.spc.add:hover { background: var(--hover); color: var(--fg); transform: none; }
+
+/* working: pulsing ring so you see which agent is active from any Space */
+.spc.working {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  animation: spcPulse 1.5s ease-in-out infinite;
+}
+@keyframes spcPulse {
+  0%, 100% { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 50%, transparent); }
+  50% { box-shadow: inset 0 0 0 2px currentColor, 0 0 13px -2px currentColor; }
+}
+/* needs human: amber, steady */
+.spc.needs {
+  color: #ffb050;
+  background: color-mix(in srgb, #ffb050 18%, transparent);
+  box-shadow: inset 0 0 0 1.5px #ffb050;
+  animation: none;
+}

@@ -10,6 +10,10 @@ Built for the logged-in web that no public API exposes. Agent-agnostic over MCP,
 
 </div>
 
+<p align="center">
+  <img src="assets/screenshot.png" width="860" alt="Iris: an agent working in a Space, with the activity halo around the site" />
+</p>
+
 ## Overview
 
 Iris is a real Chromium browser (Electron) on your machine. Your coding agent (Claude Code,

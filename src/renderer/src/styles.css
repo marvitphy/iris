@@ -128,26 +128,23 @@ html, body, #root {
   text-align: left;
 }
 
-/* always-visible "agent working / needs you" badge in the top bar */
+/* always-visible "agent working / needs you" badge — understated, no neon */
 .agentbadge {
   display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto;
   height: 28px; padding: 0 12px; margin-right: 4px;
-  border: 1px solid rgba(176, 107, 255, 0.4); border-radius: 999px;
-  background: color-mix(in srgb, var(--agent) 14%, transparent);
-  color: #e6d6ff; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer;
   -webkit-app-region: no-drag;
-  animation: badgePulse 1.6s ease-in-out infinite;
+  transition: background 0.14s, color 0.14s;
 }
-.agentbadge .pl { width: 8px; height: 8px; border-radius: 50%; background: var(--agent); box-shadow: 0 0 8px var(--agent); }
-.agentbadge.needs {
-  border-color: rgba(255, 176, 80, 0.45);
-  background: color-mix(in srgb, #ffb050 15%, transparent);
-  color: #ffdca6;
-}
-.agentbadge.needs .pl { background: #ffb050; box-shadow: 0 0 8px #ffb050; }
-@keyframes badgePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(176, 107, 255, 0); }
-  50% { box-shadow: 0 0 14px -2px rgba(176, 107, 255, 0.6); }
+.agentbadge:hover { color: var(--fg); background: rgba(255, 255, 255, 0.09); }
+.agentbadge .pl { width: 7px; height: 7px; border-radius: 50%; background: var(--agent); animation: dotBreath 2.2s ease-in-out infinite; }
+.agentbadge.needs { color: #e8c48a; border-color: rgba(255, 176, 80, 0.26); }
+.agentbadge.needs .pl { background: #ffb050; }
+@keyframes dotBreath {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .winctl { display: flex; gap: 2px; padding: 0 8px 0 6px; -webkit-app-region: no-drag; }
@@ -326,19 +323,20 @@ html, body, #root {
 }
 .spc.add:hover { background: var(--hover); color: var(--fg); transform: none; }
 
-/* working: pulsing ring so you see which agent is active from any Space */
+/* working: a calm breathing avatar (no neon), thin steady ring */
 .spc.working {
-  background: color-mix(in srgb, currentColor 18%, transparent);
-  animation: spcPulse 1.5s ease-in-out infinite;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 48%, transparent);
+  animation: spcBreath 2.2s ease-in-out infinite;
 }
-@keyframes spcPulse {
-  0%, 100% { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 45%, transparent), 0 0 0 0 rgba(0, 0, 0, 0); }
-  50% { box-shadow: inset 0 0 0 2px currentColor, 0 0 13px -1px currentColor; }
+@keyframes spcBreath {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
 }
-/* needs human: amber, steady */
+/* needs human: amber, steady, no glow */
 .spc.needs {
   color: #ffb050;
-  background: color-mix(in srgb, #ffb050 18%, transparent);
+  background: color-mix(in srgb, #ffb050 14%, transparent);
   box-shadow: inset 0 0 0 1.5px #ffb050;
   animation: none;
 }

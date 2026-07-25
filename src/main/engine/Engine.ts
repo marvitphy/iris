@@ -165,9 +165,9 @@ export class Engine {
           || q('.g-recaptcha') || q('.h-captcha') || /verify you are human|are you a robot|n[aã]o sou um rob[oô]|sou humano|prove you'?re human/.test(txt))
         return 'captcha';
       if (q('input[autocomplete="one-time-code"]') || /verification code|one-time code|c[oó]digo de verifica|two-factor|autentica[cç][aã]o de dois fatores|enter the code|c[oó]digo enviado/.test(txt))
-        return 'código de verificação (OTP)';
+        return 'verification code (OTP)';
       const pw = q('input[type=password]');
-      if (pw && pw.offsetParent !== null) return 'login necessário';
+      if (pw && pw.offsetParent !== null) return 'login required';
       return null;
     })()`
     return page.evaluate<string | null>(script).catch(() => null)

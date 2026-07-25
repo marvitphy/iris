@@ -44,14 +44,14 @@ function createWindow(): void {
   })
   manager.on('handoff', ({ id, reason }: { id: string; reason: string }) => {
     if (Notification.isSupported()) {
-      new Notification({ title: 'Iris — precisa de você', body: `Ação humana necessária: ${reason}` }).show()
+      new Notification({ title: 'Iris needs you', body: `Human action needed: ${reason}` }).show()
     }
     win.focus()
     manager.activate(id)
   })
   manager.on('approval', ({ id, action }: { id: string; action: string }) => {
     if (Notification.isSupported()) {
-      new Notification({ title: 'Iris — aprovar ação?', body: action }).show()
+      new Notification({ title: 'Iris: approve action?', body: action }).show()
     }
     win.focus()
     manager.activate(id)

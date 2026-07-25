@@ -28,14 +28,14 @@ function displayUrl(url: string | undefined): string {
 
 function relTime(at: number): string {
   const s = Math.floor((Date.now() - at) / 1000)
-  if (s < 10) return 'agora'
+  if (s < 10) return 'now'
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   if (m < 60) return `${m}m`
   return `${Math.floor(m / 60)}h`
 }
 
-const ACT_VERB: Record<string, string> = { search: 'buscou', visit: 'abriu', tab: 'nova aba', read: 'leu' }
+const ACT_VERB: Record<string, string> = { search: 'searched', visit: 'opened', tab: 'new tab', read: 'read' }
 
 function IrisMark(): React.JSX.Element {
   return (
@@ -133,12 +133,12 @@ export function App(): React.JSX.Element {
         {needsSpace ? (
           <button className="agentbadge needs" onClick={() => iris.activateSpace(needsSpace.id)}>
             <span className="pl" />
-            Precisa de você
+            Needs you
           </button>
         ) : busySpace ? (
           <button className="agentbadge" onClick={() => iris.activateSpace(busySpace.id)}>
             <span className="pl" />
-            {busySpace.label} trabalhando
+            {busySpace.label} working
           </button>
         ) : null}
 
@@ -164,8 +164,8 @@ export function App(): React.JSX.Element {
               className={`autotoggle ${space.autonomous ? 'on' : ''}`}
               title={
                 space.autonomous
-                  ? 'Autonomia ligada — o agente age sem pedir aprovação'
-                  : 'Autonomia desligada — o agente pede aprovação em ações irreversíveis'
+                  ? 'Autonomy on. The agent acts without asking for approval'
+                  : 'Autonomy off. The agent asks for approval on irreversible actions'
               }
               onClick={() => iris.setAutonomous(space.id, !space.autonomous)}
             >
@@ -182,25 +182,25 @@ export function App(): React.JSX.Element {
         {space?.handoff && (
           <div className="handoff">
             <div className="htext">
-              <b>Precisa de você</b>
+              <b>Needs you</b>
               <span>{space.handoff.reason}</span>
             </div>
-            <button onClick={() => iris.handoffResume(space.id)}>Continuar</button>
+            <button onClick={() => iris.handoffResume(space.id)}>Resume</button>
           </div>
         )}
 
         {space?.approval && (
           <div className="approval">
             <div className="htext">
-              <b>Aprovar ação?</b>
+              <b>Approve action?</b>
               <span>{space.approval.action}</span>
             </div>
             <div className="apbtns">
               <button className="ok" onClick={() => iris.approvalDecide(space.id, true)}>
-                Aprovar
+                Approve
               </button>
               <button className="no" onClick={() => iris.approvalDecide(space.id, false)}>
-                Recusar
+                Reject
               </button>
             </div>
           </div>
@@ -241,7 +241,7 @@ export function App(): React.JSX.Element {
         </div>
 
         <div className="activity">
-          <div className="acthead">Atividade do agente</div>
+          <div className="acthead">Agent activity</div>
           <div className="actlist">
             {space && space.activity.length > 0 ? (
               [...space.activity].reverse().map((a, i) => (
@@ -254,7 +254,7 @@ export function App(): React.JSX.Element {
                 </div>
               ))
             ) : (
-              <div className="actempty">O que o agente fizer aparece aqui.</div>
+              <div className="actempty">What the agent does shows up here.</div>
             )}
           </div>
         </div>
@@ -265,7 +265,7 @@ export function App(): React.JSX.Element {
               key={s.id}
               className={`spc ${s.kind} ${s.active ? 'active' : ''} ${s.busy ? 'working' : ''} ${s.handoff || s.approval ? 'needs' : ''}`}
               onClick={() => iris.activateSpace(s.id)}
-              title={s.handoff || s.approval ? `${s.label} — precisa de você` : s.label}
+              title={s.handoff || s.approval ? `${s.label} needs you` : s.label}
             >
               {s.kind === 'agent' ? <Sparkle size={15} /> : <User size={15} />}
             </button>

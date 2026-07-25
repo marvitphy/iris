@@ -108,7 +108,7 @@ export class ControlServer {
           if (req.method === 'POST' && !tabId) {
             const newTabId = this.manager.addTab(id, body.url ? String(body.url) : undefined)
             await this.activity(id)
-            this.manager.logActivity(id, 'tab', body.url ? domainOf(this.manager.urlOf(id)) : 'nova aba')
+            this.manager.logActivity(id, 'tab', body.url ? domainOf(this.manager.urlOf(id)) : 'new tab')
             return json(res, 200, { tabId: newTabId, url: this.manager.urlOf(id) })
           }
           if (req.method === 'POST' && tabId && sub === 'activate') {
@@ -163,7 +163,7 @@ export class ControlServer {
           return json(res, 200, { ...result, handoff })
         }
         if (req.method === 'POST' && action === 'approval') {
-          const decision = await this.manager.requestApproval(id, String(body.action ?? 'ação'))
+          const decision = await this.manager.requestApproval(id, String(body.action ?? 'action'))
           return json(res, 200, { decision })
         }
         if (req.method === 'GET' && action === 'screenshot') {

@@ -90,6 +90,7 @@ function wireIpc(): void {
   ipcMain.handle(IPC.spaceCreate, (_e, kind: 'human' | 'agent') => manager.createSpace(kind))
   ipcMain.handle(IPC.spaceActivate, (_e, id: string) => manager.activate(id))
   ipcMain.handle(IPC.spaceClose, (_e, id: string) => manager.closeSpace(id))
+  ipcMain.handle(IPC.spaceRename, (_e, id: string, label: string) => manager.renameSpace(id, label))
   ipcMain.handle(IPC.tabNew, (_e, spaceId: string) => manager.addTab(spaceId, 'about:blank'))
   ipcMain.handle(IPC.tabActivate, (_e, spaceId: string, tabId: string) => manager.activateTab(spaceId, tabId))
   ipcMain.handle(IPC.tabClose, (_e, spaceId: string, tabId: string) => manager.closeTab(spaceId, tabId))

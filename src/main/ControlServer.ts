@@ -126,6 +126,10 @@ export class ControlServer {
           this.manager.activate(id)
           return json(res, 200, { ok: true })
         }
+        if (req.method === 'POST' && action === 'rename') {
+          this.manager.renameSpace(id, String(body.label ?? ''))
+          return json(res, 200, { ok: true })
+        }
         if (req.method === 'DELETE' && parts.length === 2) {
           this.manager.closeSpace(id)
           return json(res, 200, { ok: true })

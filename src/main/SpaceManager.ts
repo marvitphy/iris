@@ -13,7 +13,7 @@ const APPROVAL_TIMEOUT_MS = 120000
 
 export const SIDEBAR_WIDTH = 248
 export const TOPBAR_HEIGHT = 44
-const PAD = 14 // margin from the chrome (sidebar/topbar/window) to the glow's outer edge
+const PAD = 10 // margin from the chrome (sidebar/topbar/window) to the glow's outer edge
 const RING = 5 // width of the glow ring hugging the site
 const RADIUS = 6 // site card corner radius
 const HOME_URL = 'https://www.google.com'
@@ -162,7 +162,12 @@ export class SpaceManager extends EventEmitter {
       const next = this.order[this.order.length - 1]
       if (next) this.activate(next)
     }
-    this.emitChanged()
+    // invariant: a personal (human) Space always exists, so you can't strand yourself
+    if (!this.order.some((sid) => this.spaces.get(sid)?.kind === 'human')) {
+      this.createSpace('human', 'You')
+    } else {
+      this.emitChanged()
+    }
   }
 
   navigate(spaceId: string, input: string): Promise<void> {
@@ -193,6 +198,15 @@ export class SpaceManager extends EventEmitter {
 
   kindOf(id: string): 'human' | 'agent' | null {
     return this.spaces.get(id)?.kind ?? null
+  }
+
+  renameSpace(id: string, label: string): void {
+    const s = this.spaces.get(id)
+    if (!s) return
+    const t = label.trim().slice(0, 60)
+    if (!t) return
+    s.label = t
+    this.emitChanged()
   }
 
   has(id: string): boolean {
@@ -340,6 +354,7 @@ export class SpaceManager extends EventEmitter {
           id: s.id,
           kind: s.kind,
           label: s.label,
+          autonomous: this.autonomous.has(s.id),
           tabs: s.tabs.map((t) => ({ url: t.view.webContents.getURL() })),
           activeTabIndex: Math.max(
             0,
@@ -355,11 +370,17 @@ export class SpaceManager extends EventEmitter {
     this.seq = state.seq ?? 0
     for (const ps of state.spaces) {
       this.makeSpace(ps.id, ps.kind, ps.label)
+      if (ps.autonomous) this.autonomous.add(ps.id)
       const urls = ps.tabs.length ? ps.tabs.map((t) => t.url) : [HOME_URL]
       for (const url of urls) this.addTab(ps.id, url && url !== 'about:blank' ? url : HOME_URL)
       const space = this.spaces.get(ps.id)!
       const at = space.tabs[ps.activeTabIndex] ?? space.tabs[0]
       if (at) space.activeTabId = at.id
+    }
+    if (!this.order.some((sid) => this.spaces.get(sid)?.kind === 'human')) {
+      this.makeSpace(`human-${++this.seq}`, 'human', 'You')
+      const hid = this.order[this.order.length - 1]
+      this.addTab(hid, HOME_URL)
     }
     const first = state.activeId && this.has(state.activeId) ? state.activeId : this.order[0]
     if (first) this.activate(first)

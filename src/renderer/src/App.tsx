@@ -56,23 +56,118 @@ function Favicon({ url, title, src }: { url: string; title: string; src: string 
 
 export function App(): React.JSX.Element {
   const [spaces, setSpaces] = useState<SpaceInfo[]>([])
+  const [tip, setTip] = useState<{ text: string; x: number; y: number; place: 'top' | 'bottom' } | null>(null)
+  const [editingName, setEditingName] = useState(false)
   const [omni, setOmni] = useState('')
   const omniFocused = useRef(false)
   const omniRef = useRef<HTMLInputElement>(null)
+  const railRef = useRef<HTMLDivElement>(null)
 
   const space = useMemo(() => spaces.find((s) => s.active) ?? null, [spaces])
   const activeTab = useMemo(() => space?.tabs.find((t) => t.active) ?? null, [space])
   const needsSpace = useMemo(() => spaces.find((s) => s.handoff || s.approval), [spaces])
   const busySpace = useMemo(() => spaces.find((s) => s.busy), [spaces])
+  // human ("You") Spaces always come first in the rail
+  const railSpaces = useMemo(
+    () => [...spaces].sort((a, b) => Number(b.kind === 'human') - Number(a.kind === 'human')),
+    [spaces],
+  )
 
   useEffect(() => {
     void iris.listSpaces().then(setSpaces)
     return iris.onSpacesChanged(setSpaces)
   }, [])
 
+  useEffect(() => setEditingName(false), [space?.id])
+
+  // custom tooltip: single fixed element positioned from the hovered [data-tip], escapes all clipping
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onOver = (e: MouseEvent): void => {
+      const el = (e.target as HTMLElement)?.closest?.('[data-tip]') as HTMLElement | null
+      const text = el?.getAttribute('data-tip')
+      if (!el || !text) return
+      const r = el.getBoundingClientRect()
+      const place: 'top' | 'bottom' = r.top < 52 ? 'bottom' : 'top'
+      const x = r.left + r.width / 2
+      const y = place === 'top' ? r.top - 8 : r.bottom + 8
+      clearTimeout(timer)
+      timer = setTimeout(() => setTip({ text, x, y, place }), 350)
+    }
+    const onOut = (e: MouseEvent): void => {
+      if ((e.target as HTMLElement)?.closest?.('[data-tip]')) {
+        clearTimeout(timer)
+        setTip(null)
+      }
+    }
+    document.addEventListener('mouseover', onOver)
+    document.addEventListener('mouseout', onOut)
+    return () => {
+      document.removeEventListener('mouseover', onOver)
+      document.removeEventListener('mouseout', onOut)
+      clearTimeout(timer)
+    }
+  }, [])
+
   useEffect(() => {
     if (!omniFocused.current) setOmni(displayUrl(activeTab?.url))
   }, [activeTab?.url])
+
+  // grab-and-drag horizontal scroll on the space rail (no pointer capture, so child clicks still fire)
+  useEffect(() => {
+    const el = railRef.current
+    if (!el) return
+    let down = false
+    let startX = 0
+    let startScroll = 0
+    let moved = false
+    const onMove = (e: PointerEvent): void => {
+      if (!down) return
+      const dx = e.clientX - startX
+      if (Math.abs(dx) > 4) {
+        moved = true
+        el.classList.add('dragging')
+      }
+      if (moved) el.scrollLeft = startScroll - dx
+    }
+    const onUp = (): void => {
+      down = false
+      el.classList.remove('dragging')
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    const onDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return
+      down = true
+      moved = false
+      startX = e.clientX
+      startScroll = el.scrollLeft
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+    }
+    const onClick = (e: MouseEvent): void => {
+      if (moved) {
+        e.stopPropagation()
+        e.preventDefault()
+        moved = false
+      }
+    }
+    const onWheel = (e: WheelEvent): void => {
+      if (el.scrollWidth <= el.clientWidth) return
+      e.preventDefault()
+      el.scrollLeft += e.deltaY + e.deltaX
+    }
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('click', onClick, true)
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('click', onClick, true)
+      el.removeEventListener('wheel', onWheel)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [])
 
   const go = (e: React.FormEvent): void => {
     e.preventDefault()
@@ -94,19 +189,26 @@ export function App(): React.JSX.Element {
       <NebulaGlow active={!!space?.busy} />
       <div className={`card-glow ${space?.handoff || space?.approval ? 'attn' : ''}`} />
 
+      {tip && (
+        <div className={`tooltip tip-${tip.place}`} style={{ left: tip.x, top: tip.y }}>
+          {tip.text}
+          <span className="tip-arrow" />
+        </div>
+      )}
+
       <header className="topbar">
         <div className="tb-left">
           <IrisMark />
         </div>
         <div className="tb-main">
           <div className="nav">
-            <button title="Back" onClick={() => space && iris.back(space.id)}>
+            <button onClick={() => space && iris.back(space.id)}>
               <Back />
             </button>
-            <button title="Forward" onClick={() => space && iris.forward(space.id)}>
+            <button onClick={() => space && iris.forward(space.id)}>
               <Forward />
             </button>
-            <button title="Reload" onClick={() => space && iris.reload(space.id)}>
+            <button onClick={() => space && iris.reload(space.id)}>
               <Reload />
             </button>
           </div>
@@ -143,13 +245,13 @@ export function App(): React.JSX.Element {
         ) : null}
 
         <div className="winctl">
-          <button className="wc" onClick={() => iris.minimize()} title="Minimize">
+          <button className="wc" onClick={() => iris.minimize()}>
             <WinMin />
           </button>
-          <button className="wc" onClick={() => iris.toggleMaximize()} title="Maximize">
+          <button className="wc" onClick={() => iris.toggleMaximize()}>
             <WinMax />
           </button>
-          <button className="wc close" onClick={() => iris.close()} title="Close">
+          <button className="wc close" onClick={() => iris.close()}>
             <Close />
           </button>
         </div>
@@ -157,26 +259,59 @@ export function App(): React.JSX.Element {
 
       <aside className="sidebar">
         {space && (
-          <div className="spacehead">
-            <span className={`sdot ${space.kind}`} />
-            <span className="shname">{space.label}</span>
-            <button
-              className={`autotoggle ${space.autonomous ? 'on' : ''}`}
-              title={
-                space.autonomous
-                  ? 'Autonomy on. The agent acts without asking for approval'
-                  : 'Autonomy off. The agent asks for approval on irreversible actions'
-              }
-              onClick={() => iris.setAutonomous(space.id, !space.autonomous)}
-            >
-              <span className="knob" />
-            </button>
-            {spaces.length > 1 && (
-              <span className="shx" title="Close Space" onClick={() => iris.closeSpace(space.id)}>
-                <Close size={15} />
+          <>
+            <div className="autonomy-row">
+              <span
+                className="autonomy-label"
+                data-tip={
+                  space.autonomous
+                    ? 'The agent acts without asking for approval'
+                    : 'The agent asks before irreversible actions'
+                }
+              >
+                Autonomy
               </span>
-            )}
-          </div>
+              <button
+                className={`autotoggle ${space.autonomous ? 'on' : ''}`}
+                onClick={() => iris.setAutonomous(space.id, !space.autonomous)}
+              >
+                <span className="knob" />
+              </button>
+            </div>
+            <div className="spacehead">
+              <span className={`sdot ${space.kind}`} />
+              {editingName ? (
+                <input
+                  className="shrename"
+                  defaultValue={space.label}
+                  autoFocus
+                  spellCheck={false}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      void iris.renameSpace(space.id, e.currentTarget.value)
+                      setEditingName(false)
+                    }
+                    if (e.key === 'Escape') setEditingName(false)
+                  }}
+                  onBlur={(e) => {
+                    void iris.renameSpace(space.id, e.currentTarget.value)
+                    setEditingName(false)
+                  }}
+                />
+              ) : (
+                <span className="shname" data-tip="Double-click to rename" onDoubleClick={() => setEditingName(true)}>
+                  {space.label}
+                </span>
+              )}
+              <span
+                className={`shx ${spaces.length > 1 ? '' : 'ghost'}`}
+                data-tip={spaces.length > 1 ? 'Close Space' : undefined}
+                onClick={spaces.length > 1 ? () => iris.closeSpace(space.id) : undefined}
+              >
+                {spaces.length > 1 && <Close size={15} />}
+              </span>
+            </div>
+          </>
         )}
 
         {space?.handoff && (
@@ -240,37 +375,22 @@ export function App(): React.JSX.Element {
           </button>
         </div>
 
-        <div className="activity">
-          <div className="acthead">Agent activity</div>
-          <div className="actlist">
-            {space && space.activity.length > 0 ? (
-              [...space.activity].reverse().map((a, i) => (
-                <div className="act" key={space.activity.length - i}>
-                  <span className={`actdot k-${a.kind}`} />
-                  <span className="acttext">
-                    <b>{ACT_VERB[a.kind] ?? a.kind}</b> {a.text}
-                  </span>
-                  <span className="actat">{relTime(a.at)}</span>
-                </div>
-              ))
-            ) : (
-              <div className="actempty">What the agent does shows up here.</div>
-            )}
-          </div>
-        </div>
+        <div className="sidebar-spacer" />
 
-        <div className="spaces">
-          {spaces.map((s) => (
-            <button
-              key={s.id}
-              className={`spc ${s.kind} ${s.active ? 'active' : ''} ${s.busy ? 'working' : ''} ${s.handoff || s.approval ? 'needs' : ''}`}
-              onClick={() => iris.activateSpace(s.id)}
-              title={s.handoff || s.approval ? `${s.label} needs you` : s.label}
-            >
-              {s.kind === 'agent' ? <Sparkle size={15} /> : <User size={15} />}
-            </button>
-          ))}
-          <button className="spc add" title="New agent Space" onClick={() => iris.createSpace('agent')}>
+        <div className="spaces-row">
+          <div className="spaces" ref={railRef}>
+            {railSpaces.map((s) => (
+              <button
+                key={s.id}
+                className={`spc ${s.kind} ${s.active ? 'active' : ''} ${s.busy ? 'working' : ''} ${s.handoff || s.approval ? 'needs' : ''} tip-up`}
+                onClick={() => iris.activateSpace(s.id)}
+                data-tip={s.handoff || s.approval ? `${s.label} needs you` : s.label}
+              >
+                {s.kind === 'agent' ? <Sparkle size={15} /> : <User size={15} />}
+              </button>
+            ))}
+          </div>
+          <button className="spc add tip-up" data-tip="New agent Space" onClick={() => iris.createSpace('agent')}>
             <Plus size={16} />
           </button>
         </div>

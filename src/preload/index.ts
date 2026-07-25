@@ -7,6 +7,7 @@ const api: IrisApi = {
   createSpace: (kind) => ipcRenderer.invoke(IPC.spaceCreate, kind),
   activateSpace: (id) => ipcRenderer.invoke(IPC.spaceActivate, id),
   closeSpace: (id) => ipcRenderer.invoke(IPC.spaceClose, id),
+  renameSpace: (id, label) => ipcRenderer.invoke(IPC.spaceRename, id, label),
   newTab: (spaceId) => ipcRenderer.invoke(IPC.tabNew, spaceId),
   activateTab: (spaceId, tabId) => ipcRenderer.invoke(IPC.tabActivate, spaceId, tabId),
   closeTab: (spaceId, tabId) => ipcRenderer.invoke(IPC.tabClose, spaceId, tabId),

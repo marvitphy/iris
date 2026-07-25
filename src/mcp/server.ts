@@ -84,6 +84,18 @@ server.registerTool(
 )
 
 server.registerTool(
+  'space_rename',
+  {
+    title: 'Rename a Space',
+    description:
+      'Give a Space a short, human-readable title that reflects what it is for. Do this early, once you know the task (e.g. "Deep research", "AI in 2026", "Diabetes treatments", "Competitor analysis"). Keep it 1-3 words, no long sentences. Helps the user tell Spaces apart in the rail.',
+    inputSchema: { spaceId: z.string().optional(), label: z.string() },
+  },
+  async ({ spaceId, label }) =>
+    text(await control(`/spaces/${await resolveSpace(spaceId)}/rename`, 'POST', { label })),
+)
+
+server.registerTool(
   'space_activate',
   {
     title: 'Activate a Space',

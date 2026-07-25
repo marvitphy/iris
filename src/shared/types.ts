@@ -44,6 +44,7 @@ export interface PersistedSpace {
   id: string
   kind: 'human' | 'agent'
   label: string
+  autonomous?: boolean
   tabs: PersistedTab[]
   activeTabIndex: number
 }
@@ -59,6 +60,7 @@ export interface IrisApi {
   createSpace(kind: 'human' | 'agent'): Promise<string>
   activateSpace(id: string): Promise<void>
   closeSpace(id: string): Promise<void>
+  renameSpace(id: string, label: string): Promise<void>
   newTab(spaceId: string): Promise<void>
   activateTab(spaceId: string, tabId: string): Promise<void>
   closeTab(spaceId: string, tabId: string): Promise<void>
@@ -80,6 +82,7 @@ export const IPC = {
   spaceCreate: 'space:create',
   spaceActivate: 'space:activate',
   spaceClose: 'space:close',
+  spaceRename: 'space:rename',
   tabNew: 'tab:new',
   tabActivate: 'tab:activate',
   tabClose: 'tab:close',

@@ -43,6 +43,9 @@ Refs are only valid against the latest snapshot. After a navigation or a big cha
 - `tab_new`, `tab_list`, `tab_activate`, `tab_close`. Navigation/snapshot act on the **active tab**;
   `tab_activate` to switch which tab you're driving.
 - Omit `spaceId` on most tools — they default to the active Space.
+- **Name the Space for what it's for.** Once you know the task, call `space_rename` with a short
+  title (1-3 words): "Deep research", "AI in 2026", "Diabetes treatments", "Competitor analysis".
+  Not a long sentence. This is how the user tells Spaces apart in the rail.
 
 ### Never trust your memory of Spaces/tabs — check ground truth
 

@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Iris — a minimalist browser your AI agent drives, and you can too.",
+  "description": "A minimalist browser your AI agent drives, and you can too.",
+  "author": "Marcos Vitor <marcovito.dev@gmail.com>",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:icons": "node scripts/build-icons.mjs",
-    "dist:win": "electron-vite build && npm run build:mcp && npm run build:icons && electron-builder --win",
+    "dist:win": "electron-vite build && npm run build:mcp && npm run build:icons && electron-builder --win --publish never",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },

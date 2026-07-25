@@ -6,90 +6,126 @@
 <title>Iris, a browser your AI agent drives</title>
 <meta name="description" content="A minimalist, Windows-first Chromium browser your AI agent drives, and you drive too. For the logged-in web that no public API exposes." />
 <style>
-  :root {
-    --bg:#0b0910; --panel:rgba(255,255,255,.04); --line:rgba(255,255,255,.10);
-    --fg:#f1eff5; --muted:#9a94a8; --faint:#6e6880;
-    --violet:#b06bff; --coral:#ff8a6b;
-    --sans:ui-sans-serif,system-ui,'Segoe UI',Roboto,sans-serif;
-    --mono:ui-monospace,'Cascadia Code','JetBrains Mono',Consolas,monospace;
+  :root{
+    --bg:#08080a; --fg:#eceaef; --muted:#8b8893; --faint:#54525d;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.05);
+    --sans:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'Cascadia Code','JetBrains Mono','SF Mono',Consolas,monospace;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;}
-  .amb{position:fixed;inset:0;z-index:-1;overflow:hidden;}
-  .amb::before,.amb::after{content:'';position:absolute;border-radius:50%;filter:blur(130px);opacity:.5;}
-  .amb::before{width:52vw;height:52vw;top:-16vw;left:-10vw;background:rgba(176,107,255,.28);}
-  .amb::after{width:48vw;height:48vw;bottom:-18vw;right:-12vw;background:rgba(255,138,107,.24);}
-  .wrap{max-width:720px;margin:0 auto;padding:0 24px;}
-  main{padding:92px 0 80px;}
-  .logo{display:flex;align-items:center;gap:12px;}
-  .logo svg{width:38px;height:38px;}
-  .logo b{font-size:22px;font-weight:680;letter-spacing:-.01em;}
-  h1{font-size:clamp(30px,5.5vw,46px);line-height:1.05;letter-spacing:-.02em;margin:34px 0 0;text-wrap:balance;}
-  h1 .g{background:linear-gradient(120deg,var(--violet),var(--coral));-webkit-background-clip:text;background-clip:text;color:transparent;}
-  p.lede{color:var(--muted);font-size:18px;margin:18px 0 30px;max-width:56ch;}
-  .cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center;}
-  .btn{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:11px;background:var(--fg);color:#14121a;transition:transform .14s,box-shadow .14s;}
-  .btn:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(0,0,0,.45);}
-  .btn.ghost{background:var(--panel);color:var(--fg);border:1px solid var(--line);}
-  .note{font-family:var(--mono);font-size:12.5px;color:var(--faint);}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.16em;color:var(--faint);margin:64px 0 20px;font-weight:600;}
-  .steps{display:grid;gap:14px;counter-reset:s;}
-  .step{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;}
-  .step .n{counter-increment:s;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--violet);background:rgba(176,107,255,.14);border:1px solid rgba(176,107,255,.28);}
-  .step .n::before{content:counter(s);}
-  .step .b{font-weight:600;}
-  .step .d{color:var(--muted);font-size:14.5px;margin-top:2px;}
-  code,.cmd{font-family:var(--mono);font-size:13px;}
-  .cmd{display:block;margin-top:8px;background:#000;border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:#e7e2f0;overflow-x:auto;white-space:pre;}
-  .caps{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
-  .cap{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 11px;}
-  footer{border-top:1px solid var(--line);margin-top:72px;padding:26px 0 60px;color:var(--faint);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  ::selection{background:#2a2730;}
+  a{color:inherit;}
+  .wrap{max-width:660px;margin:0 auto;padding:0 28px;}
+
+  /* header */
+  header{border-bottom:1px solid var(--line-2);}
+  header .wrap{display:flex;align-items:center;height:66px;gap:12px;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:-.01em;}
+  .brand svg{width:22px;height:22px;display:block;}
+  header .sp{flex:1;}
+  header a.gh{font-family:var(--mono);font-size:12.5px;color:var(--muted);text-decoration:none;}
+  header a.gh:hover{color:var(--fg);}
+
+  /* hero */
+  .hero{padding:96px 0 20px;}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin:0 0 26px;}
+  h1{font-size:clamp(38px,7vw,64px);line-height:1.0;letter-spacing:-.035em;font-weight:640;margin:0;text-wrap:balance;}
+  h1 .sub{display:block;color:var(--muted);font-weight:600;margin-top:.08em;}
+  p.lede{color:var(--muted);font-size:17px;line-height:1.6;margin:30px 0 0;max-width:52ch;}
+
+  .cta{display:flex;flex-wrap:wrap;gap:10px;margin-top:38px;}
+  .btn{display:inline-flex;align-items:center;text-decoration:none;font-size:14px;font-weight:550;
+    padding:11px 18px;border-radius:8px;border:1px solid transparent;transition:opacity .14s,background .14s,border-color .14s;}
+  .btn.primary{background:var(--fg);color:#0a0a0c;}
+  .btn.primary:hover{opacity:.9;}
+  .btn.ghost{color:var(--fg);border-color:var(--line);}
+  .btn.ghost:hover{background:rgba(255,255,255,.05);}
+  .worksnote{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:22px;}
+
+  hr{border:none;border-top:1px solid var(--line-2);margin:78px 0 0;}
+
+  section{padding:52px 0 0;}
+  .label{font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin:0 0 28px;}
+
+  /* steps: editorial numbered list */
+  ol.steps{list-style:none;margin:0;padding:0;counter-reset:s;}
+  ol.steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:18px;
+    padding:22px 0;border-top:1px solid var(--line-2);}
+  ol.steps li:first-child{border-top:none;}
+  ol.steps li::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);font-size:13px;color:var(--faint);padding-top:2px;letter-spacing:.02em;}
+  .st .t{font-weight:600;font-size:15.5px;}
+  .st .d{color:var(--muted);font-size:14.5px;margin-top:4px;}
+  .cmd{display:block;margin-top:12px;background:#050506;border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;font-family:var(--mono);font-size:12.5px;color:#d9d5e0;overflow-x:auto;white-space:pre;}
+
+  .uses{color:var(--muted);font-size:15px;line-height:1.75;max-width:56ch;}
+  .uses b{color:var(--fg);font-weight:560;}
+
+  footer{margin-top:80px;border-top:1px solid var(--line-2);}
+  footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+    padding-top:24px;padding-bottom:64px;font-family:var(--mono);font-size:12px;color:var(--faint);}
   footer a{color:var(--muted);text-decoration:none;}
   footer a:hover{color:var(--fg);}
 </style>
 </head>
 <body>
-<div class="amb"></div>
-<main class="wrap">
-  <div class="logo">
-    <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B06BFF"/><stop offset="1" stop-color="#FF8A6B"/></linearGradient><clipPath id="cl"><circle cx="206" cy="256" r="120"/></clipPath></defs>
-      <circle cx="306" cy="256" r="120" fill="url(#g)" clip-path="url(#cl)"/>
-      <circle cx="206" cy="256" r="120" fill="none" stroke="#B06BFF" stroke-width="30"/>
-      <circle cx="306" cy="256" r="120" fill="none" stroke="#FF8A6B" stroke-width="30"/>
-    </svg>
-    <b>Iris</b>
+
+<header>
+  <div class="wrap">
+    <span class="brand">
+      <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#B06BFF"/><stop offset="1" stop-color="#FF8A6B"/></linearGradient><clipPath id="cl"><circle cx="206" cy="256" r="120"/></clipPath></defs>
+        <circle cx="306" cy="256" r="120" fill="url(#g)" clip-path="url(#cl)"/>
+        <circle cx="206" cy="256" r="120" fill="none" stroke="#B06BFF" stroke-width="32"/>
+        <circle cx="306" cy="256" r="120" fill="none" stroke="#FF8A6B" stroke-width="32"/>
+      </svg>
+      Iris
+    </span>
+    <span class="sp"></span>
+    <a class="gh" href="https://github.com/marvitphy/iris">github ↗</a>
   </div>
+</header>
 
-  <h1>The browser your <span class="g">AI agent</span> drives.<br/>And you drive too.</h1>
-  <p class="lede">A minimalist, Windows-first Chromium browser your coding agent operates through your real, logged-in sessions, for the web that no public API exposes. You watch live and take over anytime.</p>
+<main>
+  <div class="wrap">
+    <div class="hero">
+      <p class="eyebrow">Agent browser · Windows · Local</p>
+      <h1>The browser your AI agent drives.<span class="sub">And you drive too.</span></h1>
+      <p class="lede">A minimalist Chromium browser your coding agent operates through your real, logged-in sessions, for the web that no public API exposes. You watch it work and take over anytime.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/marvitphy/iris/releases/latest">Download for Windows</a>
+        <a class="btn ghost" href="https://github.com/marvitphy/iris">Source</a>
+      </div>
+      <p class="worksnote">Claude Code · Cursor · Codex · any MCP client</p>
+    </div>
 
-  <div class="cta">
-    <a class="btn" href="https://github.com/marvitphy/iris/releases/latest">Download for Windows</a>
-    <a class="btn ghost" href="https://github.com/marvitphy/iris">View on GitHub</a>
+    <hr />
+
+    <section>
+      <p class="label">Get started</p>
+      <ol class="steps">
+        <li><div class="st"><div class="t">Install Iris</div><div class="d">Download and run the installer. On first launch it sets up the MCP server and installs the Iris skill for your agent.</div></div></li>
+        <li><div class="st"><div class="t">Launch it and keep it open</div><div class="d">The agent connects to the running window. Sign into the sites you want it to use; your sessions persist.</div></div></li>
+        <li><div class="st"><div class="t">Point your agent at it</div><div class="d">In Claude Code, run:</div><code class="cmd">claude mcp add iris -- node %LOCALAPPDATA%\Iris\iris-mcp.mjs</code></div></li>
+        <li><div class="st"><div class="t">Restart your agent</div><div class="d">Restart Claude Code so it loads the skill and the new tools.</div></div></li>
+        <li><div class="st"><div class="t">Tell it what to do</div><div class="d">Anything you can do in a browser you are signed into.</div></div></li>
+      </ol>
+    </section>
+
+    <section>
+      <p class="label">What it's for</p>
+      <p class="uses"><b>Deep research and competitor analysis.</b> Social operations across X, LinkedIn, and Reddit. SaaS back-office work in HubSpot, Notion, or Stripe. Internal admin panels, job applications, bookings. Anything behind a login that no API will give you.</p>
+    </section>
   </div>
-  <p class="note" style="margin-top:14px;">Works with Claude Code, Cursor, Codex, any MCP client.</p>
-
-  <div class="caps">
-    <span class="cap">Spaces</span><span class="cap">real logins</span><span class="cap">activity trail</span>
-    <span class="cap">handoff</span><span class="cap">approval gates</span><span class="cap">local &amp; private</span>
-  </div>
-
-  <h2>Get started</h2>
-  <div class="steps">
-    <div class="step"><div class="n"></div><div><div class="b">Install Iris</div><div class="d">Download and run the installer above. On first launch it sets up the MCP server and installs the Iris skill for your agent automatically.</div></div></div>
-    <div class="step"><div class="n"></div><div><div class="b">Launch Iris and keep it open</div><div class="d">The agent connects to the running Iris window. Sign into the sites you want it to use, and your sessions persist.</div></div></div>
-    <div class="step"><div class="n"></div><div><div class="b">Add the MCP server to your agent</div><div class="d">In Claude Code, run:</div><code class="cmd">claude mcp add iris -- node %LOCALAPPDATA%\Iris\iris-mcp.mjs</code></div></div>
-    <div class="step"><div class="n"></div><div><div class="b">Restart your agent</div><div class="d">Restart Claude Code so it loads the Iris skill and the new tools.</div></div></div>
-    <div class="step"><div class="n"></div><div><div class="b">Tell it what to do</div><div class="d">“Research the top ticketing platforms and save me a CSV.” “Post this to X.” Anything you can do in a browser you're signed into.</div></div></div>
-  </div>
-
-  <h2>What you can do</h2>
-  <p class="lede" style="margin-top:0;">Deep research &amp; competitor analysis · social ops (X, LinkedIn, Reddit…) · SaaS back-office · internal admin panels · job applications · bookings. Anything behind a login that no API gives you.</p>
 
   <footer>
-    <span>Iris · Windows-first · driven over MCP · everything local</span>
-    <a href="https://github.com/marvitphy/iris">github.com/marvitphy/iris</a>
+    <div class="wrap">
+      <span>Iris · MIT · everything local</span>
+      <a href="https://github.com/marvitphy/iris">github.com/marvitphy/iris</a>
+    </div>
   </footer>
 </main>
 </body>

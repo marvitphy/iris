@@ -3,6 +3,7 @@ import type { IrisApi, SpaceInfo } from '../../shared/types'
 import { Back, Forward, Reload, Plus, Close, WinMin, WinMax, User, Sparkle, Clock, Brain } from './Icons'
 import { NebulaGlow } from './NebulaGlow'
 import { Modal } from './Modal'
+import { SettingsModal } from './Settings'
 import type { HistoryEntry, MemoryItem } from '../../shared/types'
 
 const iris = (window as unknown as { iris: IrisApi }).iris
@@ -62,6 +63,7 @@ export function App(): React.JSX.Element {
   const [editingName, setEditingName] = useState(false)
   const [history, setHistory] = useState<HistoryEntry[] | null>(null)
   const [memories, setMemories] = useState<MemoryItem[] | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [omni, setOmni] = useState('')
   const omniFocused = useRef(false)
   const omniRef = useRef<HTMLInputElement>(null)
@@ -113,8 +115,10 @@ export function App(): React.JSX.Element {
     [],
   )
 
+  useEffect(() => iris.onOpenSettings(() => setSettingsOpen(true)), [])
+
   // A dialog must hide the native site view, which is composited above this renderer
-  const modalOpen = history !== null || memories !== null
+  const modalOpen = history !== null || memories !== null || settingsOpen
   useEffect(() => {
     void iris.setOverlay(modalOpen)
   }, [modalOpen])
@@ -237,6 +241,8 @@ export function App(): React.JSX.Element {
         </div>
       )}
 
+      {settingsOpen && <SettingsModal space={space} onClose={() => setSettingsOpen(false)} />}
+
       {memories && (
         <Modal
           title="Memory"
@@ -299,7 +305,9 @@ export function App(): React.JSX.Element {
 
       <header className="topbar">
         <div className="tb-left">
-          <IrisMark />
+          <button className="markbtn" data-tip="Settings" onClick={() => setSettingsOpen(true)}>
+            <IrisMark />
+          </button>
         </div>
         <div className="tb-main">
           <div className="nav">

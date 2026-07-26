@@ -40,6 +40,14 @@ const api: IrisApi = {
   getMemories: () => ipcRenderer.invoke(IPC.memoryList),
   forgetMemory: (id) => ipcRenderer.invoke(IPC.memoryForget, id),
   setOverlay: (on) => ipcRenderer.invoke(IPC.uiOverlay, on),
+  getSettings: () => ipcRenderer.invoke(IPC.settingsGet),
+  setDns: (mode) => ipcRenderer.invoke(IPC.settingsDns, mode),
+  setSpaceLocation: (spaceId, location) => ipcRenderer.invoke(IPC.settingsLocation, spaceId, location),
+  onOpenSettings: (cb) => {
+    const handler = (): void => cb()
+    ipcRenderer.on(IPC.openSettings, handler)
+    return () => ipcRenderer.removeListener(IPC.openSettings, handler)
+  },
   onOpenMemory: (cb) => {
     const handler = (): void => cb()
     ipcRenderer.on(IPC.openMemory, handler)

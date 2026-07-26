@@ -86,10 +86,28 @@ export interface IrisApi {
   getMemories(): Promise<MemoryItem[]>
   forgetMemory(id: string): Promise<boolean>
   setOverlay(on: boolean): Promise<void>
+  getSettings(): Promise<IrisSettings>
+  setDns(mode: IrisSettings['dns']): Promise<void>
+  setSpaceLocation(spaceId: string, location: SpaceLocation | null): Promise<void>
   onSpacesChanged(cb: (spaces: SpaceInfo[]) => void): () => void
   onFocusOmnibox(cb: () => void): () => void
   onOpenHistory(cb: () => void): () => void
   onOpenMemory(cb: () => void): () => void
+  onOpenSettings(cb: () => void): () => void
+}
+
+export interface SpaceLocation {
+  label: string
+  latitude: number
+  longitude: number
+  timezone: string
+  locale: string
+}
+
+export interface IrisSettings {
+  dns: 'system' | 'google' | 'cloudflare' | 'quad9' | 'adguard' | 'opendns' | 'mullvad'
+  /** per-Space location override: what the sites in that Space think your location is */
+  locations: Record<string, SpaceLocation>
 }
 
 export interface MemoryItem {
@@ -133,4 +151,8 @@ export const IPC = {
   memoryList: 'memory:list',
   memoryForget: 'memory:forget',
   uiOverlay: 'ui:overlay',
+  settingsGet: 'settings:get',
+  settingsDns: 'settings:dns',
+  settingsLocation: 'settings:location',
+  openSettings: 'ui:open-settings',
 } as const

@@ -32,6 +32,8 @@ export class ControlServer {
     private manager: SpaceManager,
     private engine: Engine,
     private memory: Memory,
+    /** re-applies per-Space emulation (location) after a navigation replaces the document */
+    private onNavigated?: (spaceId: string) => Promise<void>,
   ) {
     this.spaceRoutes = this.buildSpaceRoutes()
   }
@@ -212,6 +214,7 @@ export class ControlServer {
           this.manager.logActivity(ctx.id, isUrl ? 'visit' : 'search', isUrl ? domainOf(landed) : raw)
           // Surface what Iris already learned about this domain, without the agent having to ask.
           const learnings = this.memory.forSite(domainOf(landed)).map((e) => e.text)
+          await this.onNavigated?.(ctx.id)
           return { ok: true, url: landed, ...(learnings.length ? { learnings } : {}) }
         }),
       'POST back': async (ctx) =>

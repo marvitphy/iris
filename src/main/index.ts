@@ -6,6 +6,7 @@ import { SpaceManager } from './SpaceManager'
 import { Engine } from './engine/Engine'
 import { ControlServer } from './ControlServer'
 import { Memory } from './Memory'
+import { Settings } from './Settings'
 import { IPC, type PersistedState } from '../shared/types'
 import { runtimeDir, runtimeFile, type RuntimeHandshake } from '../shared/runtime'
 
@@ -22,6 +23,7 @@ app.userAgentFallback = app.userAgentFallback.replace(/\s(?:iris|Electron)\/[\d.
 let manager: SpaceManager
 let engine: Engine
 let memory: Memory
+let settings: Settings
 let mainWindow: BrowserWindow
 
 function createWindow(): void {
@@ -66,6 +68,12 @@ function createWindow(): void {
     if (!win.webContents.isDestroyed()) {
       win.webContents.focus()
       win.webContents.send(IPC.openHistory)
+    }
+  })
+  manager.on('open-settings', () => {
+    if (!win.webContents.isDestroyed()) {
+      win.webContents.focus()
+      win.webContents.send(IPC.openSettings)
     }
   })
   manager.on('open-memory', () => {
@@ -135,6 +143,14 @@ function wireIpc(): void {
   ipcMain.handle(IPC.memoryList, () => memory.all())
   ipcMain.handle(IPC.memoryForget, (_e, id: string) => memory.forget(id))
   ipcMain.handle(IPC.uiOverlay, (_e, on: boolean) => manager.setOverlay(on))
+  ipcMain.handle(IPC.settingsGet, () => settings.all())
+  ipcMain.handle(IPC.settingsDns, (_e, mode: 'system' | 'google' | 'cloudflare') => settings.setDns(mode))
+  ipcMain.handle(IPC.settingsLocation, async (_e, spaceId: string, location) => {
+    settings.setLocation(spaceId, location)
+    await engine
+      .applyLocation({ token: manager.activeTabToken(spaceId), url: manager.urlOf(spaceId) }, location)
+      .catch(() => {})
+  })
 }
 
 function writeHandshake(controlPort: number): void {
@@ -169,6 +185,8 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   engine = new Engine(CDP_PORT)
   memory = new Memory()
+  settings = new Settings()
+  settings.applyDns()
   wireIpc()
   createWindow()
   await engine.connect().catch((e) => console.error('[iris] engine connect failed:', e.message))

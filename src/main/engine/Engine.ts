@@ -172,6 +172,37 @@ export class Engine {
     return page.evaluate<string | null>(HANDOFF_SCRIPT).catch(() => null)
   }
 
+  /**
+   * Make a Space present a different location to the sites in it: geolocation, timezone and language
+   * together, because a coordinate that disagrees with the clock and the Accept-Language reads as
+   * nonsense to any site that checks. Applied per page over CDP.
+   */
+  async applyLocation(
+    target: PageTarget,
+    loc: { latitude: number; longitude: number; timezone: string; locale: string } | null,
+  ): Promise<void> {
+    const page = await this.find(target)
+    if (!page) return
+    try {
+      const client = await page.context().newCDPSession(page)
+      if (!loc) {
+        await client.send('Emulation.clearGeolocationOverride')
+        await client.detach()
+        return
+      }
+      await client.send('Emulation.setGeolocationOverride', {
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        accuracy: 40,
+      })
+      await client.send('Emulation.setTimezoneOverride', { timezoneId: loc.timezone }).catch(() => {})
+      await client.send('Emulation.setLocaleOverride', { locale: loc.locale }).catch(() => {})
+      await client.detach()
+    } catch {
+      // emulation unavailable on this target: leave the real location in place
+    }
+  }
+
   private async flashHighlight(page: Page, box: { x: number; y: number; width: number; height: number }): Promise<void> {
     try {
       const client = await page.context().newCDPSession(page)

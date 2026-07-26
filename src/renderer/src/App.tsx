@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IrisApi, SpaceInfo } from '../../shared/types'
-import { Back, Forward, Reload, Plus, Close, WinMin, WinMax, User, Sparkle } from './Icons'
+import { Back, Forward, Reload, Plus, Close, WinMin, WinMax, User, Sparkle, Clock, Brain } from './Icons'
 import { NebulaGlow } from './NebulaGlow'
 import { Modal } from './Modal'
-import type { HistoryEntry } from '../../shared/types'
+import type { HistoryEntry, MemoryItem } from '../../shared/types'
 
 const iris = (window as unknown as { iris: IrisApi }).iris
 
@@ -61,6 +61,7 @@ export function App(): React.JSX.Element {
   const [tip, setTip] = useState<{ text: string; x: number; y: number; place: 'top' | 'bottom' } | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [history, setHistory] = useState<HistoryEntry[] | null>(null)
+  const [memories, setMemories] = useState<MemoryItem[] | null>(null)
   const [omni, setOmni] = useState('')
   const omniFocused = useRef(false)
   const omniRef = useRef<HTMLInputElement>(null)
@@ -106,6 +107,18 @@ export function App(): React.JSX.Element {
     [],
   )
 
+  // Ctrl+M opens what Iris remembers
+  useEffect(
+    () => iris.onOpenMemory(() => void iris.getMemories().then((m) => setMemories([...m].reverse()))),
+    [],
+  )
+
+  // A dialog must hide the native site view, which is composited above this renderer
+  const modalOpen = history !== null || memories !== null
+  useEffect(() => {
+    void iris.setOverlay(modalOpen)
+  }, [modalOpen])
+
   // custom tooltip: single fixed element positioned from the hovered [data-tip], escapes all clipping
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -115,7 +128,9 @@ export function App(): React.JSX.Element {
       if (!el || !text) return
       const r = el.getBoundingClientRect()
       const place: 'top' | 'bottom' = r.top < 52 ? 'bottom' : 'top'
-      const x = r.left + r.width / 2
+      // keep the (centered) bubble inside the window, or it gets clipped at the edges
+      const half = 130
+      const x = Math.min(Math.max(r.left + r.width / 2, half + 8), window.innerWidth - half - 8)
       const y = place === 'top' ? r.top - 8 : r.bottom + 8
       clearTimeout(timer)
       timer = setTimeout(() => setTip({ text, x, y, place }), 350)
@@ -220,6 +235,37 @@ export function App(): React.JSX.Element {
           {tip.text}
           <span className="tip-arrow" />
         </div>
+      )}
+
+      {memories && (
+        <Modal
+          title="Memory"
+          subtitle={`${memories.length} things Iris remembers`}
+          onClose={() => setMemories(null)}
+        >
+          {memories.length === 0 ? (
+            <div className="mempty">Nothing remembered yet. The agent saves what it learns as it works.</div>
+          ) : (
+            memories.map((m) => (
+              <div className="mrow" key={m.id}>
+                <span className={`memscope s-${m.scope}`}>{m.scope === 'site' ? m.key : m.scope}</span>
+                <div className="mrow-main">
+                  <div className="memtext">{m.text}</div>
+                </div>
+                <span
+                  className="memforget"
+                  data-tip="Forget this"
+                  onClick={() => {
+                    void iris.forgetMemory(m.id)
+                    setMemories((prev) => (prev ? prev.filter((x) => x.id !== m.id) : prev))
+                  }}
+                >
+                  <Close size={14} />
+                </span>
+              </div>
+            ))
+          )}
+        </Modal>
       )}
 
       {history && (
@@ -358,13 +404,11 @@ export function App(): React.JSX.Element {
                   {space.label}
                 </span>
               )}
-              <span
-                className={`shx ${spaces.length > 1 ? '' : 'ghost'}`}
-                data-tip={spaces.length > 1 ? 'Close Space' : undefined}
-                onClick={spaces.length > 1 ? () => iris.closeSpace(space.id) : undefined}
-              >
-                {spaces.length > 1 && <Close size={15} />}
-              </span>
+              {space.kind === 'agent' && (
+                <span className="shx" data-tip="Close Space" onClick={() => iris.closeSpace(space.id)}>
+                  <Close size={15} />
+                </span>
+              )}
             </div>
           </>
         )}
@@ -449,6 +493,18 @@ export function App(): React.JSX.Element {
         )}
 
         <div className="sidebar-spacer" />
+
+        <div className="sideacts">
+          <button
+            className="sideact"
+            onClick={() => space && void iris.getHistory(space.id).then((h) => setHistory([...h].reverse()))}
+          >
+            <Clock size={14} /> History
+          </button>
+          <button className="sideact" onClick={() => void iris.getMemories().then((m) => setMemories([...m].reverse()))}>
+            <Brain size={14} /> Memory
+          </button>
+        </div>
 
         <div className="spaces-row">
           <div className="spaces" ref={railRef}>

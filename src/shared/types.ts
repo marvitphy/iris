@@ -83,9 +83,21 @@ export interface IrisApi {
   approvalDecide(spaceId: string, approved: boolean): Promise<void>
   setAutonomous(spaceId: string, on: boolean): Promise<void>
   getHistory(spaceId: string): Promise<HistoryEntry[]>
+  getMemories(): Promise<MemoryItem[]>
+  forgetMemory(id: string): Promise<boolean>
+  setOverlay(on: boolean): Promise<void>
   onSpacesChanged(cb: (spaces: SpaceInfo[]) => void): () => void
   onFocusOmnibox(cb: () => void): () => void
   onOpenHistory(cb: () => void): () => void
+  onOpenMemory(cb: () => void): () => void
+}
+
+export interface MemoryItem {
+  id: string
+  scope: 'site' | 'space' | 'global'
+  key: string
+  text: string
+  at: number
 }
 
 export interface HistoryEntry {
@@ -117,4 +129,8 @@ export const IPC = {
   focusOmnibox: 'ui:focus-omnibox',
   openHistory: 'ui:open-history',
   historyGet: 'space:history',
+  openMemory: 'ui:open-memory',
+  memoryList: 'memory:list',
+  memoryForget: 'memory:forget',
+  uiOverlay: 'ui:overlay',
 } as const

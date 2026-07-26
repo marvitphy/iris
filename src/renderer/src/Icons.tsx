@@ -70,6 +70,22 @@ export const Close = ({ size = 16 }: IconProps) =>
   )
 export const WinMin = ({ size = 14 }: IconProps) => svg(size, <line x1="5" y1="12" x2="19" y2="12" />)
 export const WinMax = ({ size = 12 }: IconProps) => svg(size, <rect x="5" y="5" width="14" height="14" rx="2" />)
+export const Clock = ({ size = 14 }: IconProps) =>
+  svg(
+    size,
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15.5 14" />
+    </>,
+  )
+export const Brain = ({ size = 14 }: IconProps) =>
+  svg(
+    size,
+    <>
+      <path d="M12 5a3 3 0 0 0-6 0 3 3 0 0 0-1.5 5.5A3 3 0 0 0 6 16a3 3 0 0 0 6 0z" />
+      <path d="M12 5a3 3 0 0 1 6 0 3 3 0 0 1 1.5 5.5A3 3 0 0 1 18 16a3 3 0 0 1-6 0z" />
+    </>,
+  )
 export const User = ({ size = 16 }: IconProps) =>
   svg(
     size,

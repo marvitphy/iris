@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync } from 'no
 import { SpaceManager } from './SpaceManager'
 import { Engine } from './engine/Engine'
 import { ControlServer } from './ControlServer'
+import { Memory } from './Memory'
 import { IPC, type PersistedState } from '../shared/types'
 import { runtimeDir, runtimeFile, type RuntimeHandshake } from '../shared/runtime'
 
@@ -16,6 +17,7 @@ app.commandLine.appendSwitch('remote-allow-origins', '*') // Chromium M111+ need
 
 let manager: SpaceManager
 let engine: Engine
+let memory: Memory
 let mainWindow: BrowserWindow
 
 function createWindow(): void {
@@ -38,6 +40,7 @@ function createWindow(): void {
   }
 
   manager = new SpaceManager(win)
+  manager.attachChromeShortcuts(win.webContents)
   manager.on('changed', (spaces) => {
     if (!win.webContents.isDestroyed()) win.webContents.send(IPC.spacesChanged, spaces)
     scheduleSave()
@@ -59,6 +62,12 @@ function createWindow(): void {
     if (!win.webContents.isDestroyed()) {
       win.webContents.focus()
       win.webContents.send(IPC.openHistory)
+    }
+  })
+  manager.on('open-memory', () => {
+    if (!win.webContents.isDestroyed()) {
+      win.webContents.focus()
+      win.webContents.send(IPC.openMemory)
     }
   })
   manager.on('approval', ({ id, action }: { id: string; action: string }) => {
@@ -119,6 +128,9 @@ function wireIpc(): void {
   )
   ipcMain.handle(IPC.setAutonomous, (_e, spaceId: string, on: boolean) => manager.setAutonomous(spaceId, on))
   ipcMain.handle(IPC.historyGet, (_e, spaceId: string) => manager.historyOf(spaceId))
+  ipcMain.handle(IPC.memoryList, () => memory.all())
+  ipcMain.handle(IPC.memoryForget, (_e, id: string) => memory.forget(id))
+  ipcMain.handle(IPC.uiOverlay, (_e, on: boolean) => manager.setOverlay(on))
 }
 
 function writeHandshake(controlPort: number): void {
@@ -152,11 +164,12 @@ app.whenReady().then(async () => {
   runOnboarding()
   Menu.setApplicationMenu(null)
   engine = new Engine(CDP_PORT)
+  memory = new Memory()
   wireIpc()
   createWindow()
   await engine.connect().catch((e) => console.error('[iris] engine connect failed:', e.message))
 
-  const control = new ControlServer(manager, engine)
+  const control = new ControlServer(manager, engine, memory)
   const controlPort = await control.listen()
   writeHandshake(controlPort)
   console.log(`[iris] control server on 127.0.0.1:${controlPort}, CDP on ${CDP_PORT}`)

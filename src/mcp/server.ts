@@ -245,6 +245,39 @@ server.registerTool(
 )
 
 server.registerTool(
+  'remember',
+  {
+    title: 'Remember something for next time',
+    description:
+      'Save a durable note so a future session does not have to rediscover it. Use scope "site" (with key = the domain, e.g. "linkedin.com") for how a site works — where a button hides, the steps of a flow, a quirk that cost you time. Iris hands those back automatically the next time you land on that domain. Use "space" (key = spaceId) for findings in this work session, and "global" for lasting facts about the user. Write one specific, reusable sentence, not a log entry.',
+    inputSchema: {
+      text: z.string(),
+      scope: z.enum(['site', 'space', 'global']).optional(),
+      key: z.string().optional(),
+    },
+  },
+  async ({ text: value, scope, key }) =>
+    text(await control('/memory', 'POST', { text: value, scope: scope ?? 'global', key: key ?? '' })),
+)
+
+server.registerTool(
+  'recall',
+  {
+    title: 'Search what Iris remembers',
+    description:
+      'Look up saved memories by keyword (optionally filtered by scope). Site memories for the page you are on are already returned by navigate, so use this for everything else: what the user prefers, what a past session found.',
+    inputSchema: { query: z.string().optional(), scope: z.enum(['site', 'space', 'global']).optional() },
+  },
+  async ({ query, scope }) => {
+    const params = new URLSearchParams()
+    if (query) params.set('query', query)
+    if (scope) params.set('scope', scope)
+    const qs = params.toString()
+    return text(await control(`/memory${qs ? `?${qs}` : ''}`))
+  },
+)
+
+server.registerTool(
   'press_key',
   {
     title: 'Press a key',

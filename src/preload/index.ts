@@ -37,6 +37,14 @@ const api: IrisApi = {
     ipcRenderer.on(IPC.openHistory, handler)
     return () => ipcRenderer.removeListener(IPC.openHistory, handler)
   },
+  getMemories: () => ipcRenderer.invoke(IPC.memoryList),
+  forgetMemory: (id) => ipcRenderer.invoke(IPC.memoryForget, id),
+  setOverlay: (on) => ipcRenderer.invoke(IPC.uiOverlay, on),
+  onOpenMemory: (cb) => {
+    const handler = (): void => cb()
+    ipcRenderer.on(IPC.openMemory, handler)
+    return () => ipcRenderer.removeListener(IPC.openMemory, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('iris', api)

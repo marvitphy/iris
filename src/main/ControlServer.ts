@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import type { SpaceManager } from './SpaceManager'
 import type { Engine, PageTarget } from './engine/Engine'
+import type { Memory, MemoryScope } from './Memory'
 
 type Body = Record<string, unknown>
 
@@ -30,6 +31,7 @@ export class ControlServer {
   constructor(
     private manager: SpaceManager,
     private engine: Engine,
+    private memory: Memory,
   ) {
     this.spaceRoutes = this.buildSpaceRoutes()
   }
@@ -52,7 +54,7 @@ export class ControlServer {
       const method = req.method ?? 'GET'
       const body = await readBody(req)
 
-      const root = await this.handleRoot(parts, method, body)
+      const root = await this.handleRoot(parts, method, body, url.searchParams)
       if (root) return json(res, root.status, root.payload)
 
       if (parts[0] !== 'spaces') return json(res, 404, { error: 'not found' })
@@ -65,7 +67,7 @@ export class ControlServer {
   }
 
   /** Routes that aren't scoped to a Space: health, file writes, and live context. */
-  private async handleRoot(parts: string[], method: string, body: Body): Promise<Reply | null> {
+  private async handleRoot(parts: string[], method: string, body: Body, query: URLSearchParams): Promise<Reply | null> {
     if (method === 'GET' && parts[0] === 'health') {
       return ok({ ok: true, spaces: this.manager.list() })
     }
@@ -74,7 +76,24 @@ export class ControlServer {
       return ok({ path })
     }
     if (method === 'GET' && parts[0] === 'context') return ok(this.liveContext())
+    if (parts[0] === 'memory') return this.handleMemory(parts, method, body, query)
     return null
+  }
+
+  private handleMemory(parts: string[], method: string, body: Body, query: URLSearchParams): Reply {
+    if (method === 'POST' && parts.length === 1) {
+      const scope = (body.scope as MemoryScope) ?? 'global'
+      const entry = this.memory.remember(scope, String(body.key ?? ''), String(body.text ?? ''))
+      return ok({ saved: entry })
+    }
+    if (method === 'GET' && parts.length === 1) {
+      const scope = (query.get('scope') as MemoryScope | null) ?? undefined
+      return ok({ entries: this.memory.search(query.get('query') ?? '', scope) })
+    }
+    if (method === 'DELETE' && parts[1]) {
+      return ok({ forgotten: this.memory.forget(parts[1]) })
+    }
+    return notFound()
   }
 
   /** What the user is looking at right now, plus every open Space. */
@@ -187,8 +206,11 @@ export class ControlServer {
           const raw = String(ctx.body.url ?? '').trim()
           const isUrl = /^[a-z]+:\/\//i.test(raw) || (/^[^\s]+\.[^\s]+$/.test(raw) && !raw.includes(' '))
           await this.manager.navigate(ctx.id, raw)
-          this.manager.logActivity(ctx.id, isUrl ? 'visit' : 'search', isUrl ? domainOf(this.manager.urlOf(ctx.id)) : raw)
-          return { ok: true, url: this.manager.urlOf(ctx.id) }
+          const landed = this.manager.urlOf(ctx.id)
+          this.manager.logActivity(ctx.id, isUrl ? 'visit' : 'search', isUrl ? domainOf(landed) : raw)
+          // Surface what Iris already learned about this domain, without the agent having to ask.
+          const learnings = this.memory.forSite(domainOf(landed)).map((e) => e.text)
+          return { ok: true, url: landed, ...(learnings.length ? { learnings } : {}) }
         }),
       'POST back': async (ctx) =>
         withResult(ctx, async () => {

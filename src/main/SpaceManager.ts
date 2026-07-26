@@ -71,6 +71,18 @@ export class SpaceManager extends EventEmitter {
     win.on('resize', () => this.layout())
   }
 
+  /** Route shortcuts pressed while focus is in the app chrome (sidebar, omnibox) to the active Space,
+   *  so Ctrl+T/H/M work no matter which surface has focus. */
+  attachChromeShortcuts(wc: WebContents): void {
+    wc.on('before-input-event', (event, input) => {
+      const id = this.activeId
+      if (!id) return
+      const typing = input.key.length === 1 && !input.control && !input.meta
+      if (typing) return
+      if (this.handleShortcut(id, input)) event.preventDefault()
+    })
+  }
+
   createSpace(kind: 'human' | 'agent', label?: string): string {
     const id = kind === 'human' ? `human-${++this.seq}` : `agent-${++this.seq}`
     this.makeSpace(id, kind, label ?? (kind === 'human' ? 'You' : `Agent ${this.seq}`))
@@ -163,6 +175,22 @@ export class SpaceManager extends EventEmitter {
       if (this.activeId === spaceId) this.showActiveView()
     }
     this.emitChanged()
+  }
+
+  /**
+   * Hide the site view while a modal is open. The active tab is a NATIVE view composited above the
+   * renderer, so a renderer-drawn dialog would sit behind it; detaching the view is what lets a modal
+   * actually take over the window.
+   */
+  setOverlay(on: boolean): void {
+    if (on) {
+      if (this.attached) {
+        this.win.contentView.removeChildView(this.attached)
+        this.attached = null
+      }
+      return
+    }
+    this.showActiveView()
   }
 
   activate(id: string): void {
@@ -583,6 +611,7 @@ const SHORTCUTS: Record<string, (m: SpaceManager, spaceId: string) => void> = {
   'alt+arrowleft': (m, id) => m.back(id),
   'alt+arrowright': (m, id) => m.forward(id),
   'mod+h': (m) => m.emit('open-history'),
+  'mod+m': (m) => m.emit('open-memory'),
 }
 
 function withRadius(view: WebContentsView): void {

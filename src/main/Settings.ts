@@ -1,9 +1,9 @@
-import { app } from 'electron'
+import { app, safeStorage } from 'electron'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { IrisSettings, SpaceLocation } from '../shared/types'
+import type { IrisSettings, SpaceLocation, SpaceProxy } from '../shared/types'
 
-const DEFAULTS: IrisSettings = { dns: 'system', locations: {} }
+const DEFAULTS: IrisSettings = { dns: 'system', locations: {}, proxies: {} }
 
 /** DNS-over-HTTPS providers offered in Settings. The system resolver stays the default; switching
  *  matters when the network's own resolver fails to answer for a domain (it looks like the site is
@@ -23,10 +23,15 @@ export const DOH_SERVERS: Record<string, string[]> = {
  */
 export class Settings {
   private data: IrisSettings = { ...DEFAULTS }
+  /** encrypted proxy passwords, kept out of the settings payload the renderer sees */
+  private secrets: Record<string, string> = {}
 
   constructor() {
     try {
-      this.data = { ...DEFAULTS, ...(JSON.parse(readFileSync(this.file(), 'utf8')) as IrisSettings) }
+      const raw = JSON.parse(readFileSync(this.file(), 'utf8')) as IrisSettings & { secrets?: Record<string, string> }
+      this.secrets = raw.secrets ?? {}
+      delete raw.secrets
+      this.data = { ...DEFAULTS, ...raw }
     } catch {
       this.data = { ...DEFAULTS }
     }
@@ -38,14 +43,14 @@ export class Settings {
 
   private save(): void {
     try {
-      writeFileSync(this.file(), JSON.stringify(this.data, null, 2))
+      writeFileSync(this.file(), JSON.stringify({ ...this.data, secrets: this.secrets }, null, 2))
     } catch {
       // best-effort
     }
   }
 
   all(): IrisSettings {
-    return { ...this.data, locations: { ...this.data.locations } }
+    return { ...this.data, locations: { ...this.data.locations }, proxies: { ...(this.data.proxies ?? {}) } }
   }
 
   setDns(mode: IrisSettings['dns']): void {
@@ -67,6 +72,38 @@ export class Settings {
 
   locationOf(spaceId: string): SpaceLocation | null {
     return this.data.locations[spaceId] ?? null
+  }
+
+  proxyOf(spaceId: string): SpaceProxy | null {
+    return this.data.proxies?.[spaceId] ?? null
+  }
+
+  /** Proxy passwords are encrypted with the OS keychain, never written as plain text. */
+  passwordOf(spaceId: string): string {
+    const blob = this.secrets[spaceId]
+    if (!blob) return ''
+    try {
+      return safeStorage.decryptString(Buffer.from(blob, 'base64'))
+    } catch {
+      return ''
+    }
+  }
+
+  setProxy(spaceId: string, proxy: (SpaceProxy & { password?: string }) | null): void {
+    this.data.proxies = this.data.proxies ?? {}
+    if (!proxy) {
+      delete this.data.proxies[spaceId]
+      delete this.secrets[spaceId]
+    } else {
+      const { password, ...rest } = proxy
+      if (password && safeStorage.isEncryptionAvailable()) {
+        this.secrets[spaceId] = safeStorage.encryptString(password).toString('base64')
+      } else if (password === '') {
+        delete this.secrets[spaceId]
+      }
+      this.data.proxies[spaceId] = { ...rest, hasPassword: !!this.secrets[spaceId] }
+    }
+    this.save()
   }
 
   setLocation(spaceId: string, location: SpaceLocation | null): void {

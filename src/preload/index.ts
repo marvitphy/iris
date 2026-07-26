@@ -45,6 +45,8 @@ const api: IrisApi = {
   installIntegration: () => ipcRenderer.invoke(IPC.integrationInstall),
   setDns: (mode) => ipcRenderer.invoke(IPC.settingsDns, mode),
   setSpaceLocation: (spaceId, location) => ipcRenderer.invoke(IPC.settingsLocation, spaceId, location),
+  setSpaceProxy: (spaceId, proxy) => ipcRenderer.invoke(IPC.settingsProxy, spaceId, proxy),
+  checkExit: (spaceId) => ipcRenderer.invoke(IPC.checkExit, spaceId),
   onOpenSettings: (cb) => {
     const handler = (): void => cb()
     ipcRenderer.on(IPC.openSettings, handler)

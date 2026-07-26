@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Modal } from './Modal'
 import { Select } from './Select'
-import type { IntegrationStatus, IrisApi, IrisSettings, SpaceInfo, SpaceLocation } from '../../shared/types'
+import type { IntegrationStatus, IrisApi, IrisSettings, SpaceInfo, SpaceLocation, SpaceProxy } from '../../shared/types'
 
 const iris = (window as unknown as { iris: IrisApi }).iris
 
@@ -41,15 +41,46 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [proxy, setProxy] = useState<SpaceProxy>({ scheme: 'http', host: '', port: 0 })
+  const [password, setPassword] = useState('')
+  const [exit, setExit] = useState('')
+  const [testing, setTesting] = useState(false)
 
   const refresh = useCallback(() => {
     void iris.getIntegration().then(setIntegration)
   }, [])
 
   useEffect(() => {
-    void iris.getSettings().then(setSettings)
+    void iris.getSettings().then((s) => {
+      setSettings(s)
+      const existing = space ? s.proxies?.[space.id] : null
+      if (existing) setProxy(existing)
+    })
     refresh()
-  }, [refresh])
+  }, [refresh, space])
+
+  const testExit = async (): Promise<void> => {
+    if (!space) return
+    setTesting(true)
+    const r = await iris.checkExit(space.id)
+    setExit('error' in r ? `Could not reach the check: ${r.error}` : `Traffic exits at ${r.ip}${r.country ? ` · ${r.city ?? ''} ${r.country}`.trimEnd() : ''}`)
+    setTesting(false)
+  }
+
+  const saveProxy = async (): Promise<void> => {
+    if (!space) return
+    await iris.setSpaceProxy(space.id, { ...proxy, password: password || undefined })
+    setPassword('')
+    setExit('Proxy set. Check the exit IP to confirm.')
+  }
+
+  const clearProxy = async (): Promise<void> => {
+    if (!space) return
+    await iris.setSpaceProxy(space.id, null)
+    setProxy({ scheme: 'http', host: '', port: 0 })
+    setPassword('')
+    setExit('Using the direct connection.')
+  }
 
   const install = async (): Promise<void> => {
     setBusy(true)
@@ -170,6 +201,67 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
             ...LOCATIONS.map((l) => ({ value: l.label, label: l.label, note: l.timezone })),
           ]}
         />
+      </section>
+
+      <section className="setgroup">
+        <div className="setrow">
+          <div className="setlabel">Proxy for this Space</div>
+          <button className="setbtn ghost" onClick={testExit} disabled={!space || testing}>
+            {testing ? 'Checking…' : 'Check exit IP'}
+          </button>
+        </div>
+        <div className="sethint">
+          Send this Space’s traffic through a proxy you provide. This is what changes the IP a site
+          sees, so it is the piece that makes a location actually hold up.
+        </div>
+
+        <div className="proxyrow">
+          <Select
+            value={proxy.scheme}
+            options={[
+              { value: 'http', label: 'HTTP' },
+              { value: 'https', label: 'HTTPS' },
+              { value: 'socks5', label: 'SOCKS5' },
+            ]}
+            onChange={(v) => setProxy({ ...proxy, scheme: v as 'http' | 'https' | 'socks5' })}
+          />
+          <input
+            className="setinput"
+            placeholder="host"
+            value={proxy.host}
+            onChange={(e) => setProxy({ ...proxy, host: e.target.value })}
+          />
+          <input
+            className="setinput port"
+            placeholder="port"
+            value={proxy.port || ''}
+            onChange={(e) => setProxy({ ...proxy, port: Number(e.target.value) || 0 })}
+          />
+        </div>
+        <div className="proxyrow">
+          <input
+            className="setinput"
+            placeholder="username (optional)"
+            value={proxy.username ?? ''}
+            onChange={(e) => setProxy({ ...proxy, username: e.target.value })}
+          />
+          <input
+            className="setinput"
+            type="password"
+            placeholder={proxy.hasPassword ? '•••••• (stored)' : 'password (optional)'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <div className="proxyactions">
+          <button className="setbtn" onClick={saveProxy} disabled={!space || !proxy.host}>
+            Use proxy
+          </button>
+          <button className="setbtn ghost" onClick={clearProxy} disabled={!space}>
+            Direct connection
+          </button>
+        </div>
+        {exit && <div className="exitinfo">{exit}</div>}
       </section>
 
       <section className="setgroup">

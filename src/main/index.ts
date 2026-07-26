@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, Notification, session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync } from 'node:fs'
@@ -104,6 +104,9 @@ function createWindow(): void {
   for (const [spaceId, loc] of Object.entries(settings.all().locations)) {
     manager.setAcceptLanguage(spaceId, loc.locale)
   }
+  for (const [spaceId, proxy] of Object.entries(settings.all().proxies ?? {})) {
+    void manager.applyProxy(spaceId, proxy)
+  }
 
   const saved = loadState()
   if (!saved || !manager.restore(saved)) manager.createSpace('human', 'You')
@@ -162,6 +165,11 @@ function wireIpc(): void {
   ipcMain.handle(IPC.integrationGet, () => integration.status(control?.lastAgentCallAt ?? 0))
   ipcMain.handle(IPC.integrationInstall, () => integration.install())
   ipcMain.handle(IPC.settingsDns, (_e, mode: 'system' | 'google' | 'cloudflare') => settings.setDns(mode))
+  ipcMain.handle(IPC.settingsProxy, async (_e, spaceId: string, proxy) => {
+    settings.setProxy(spaceId, proxy)
+    await manager.applyProxy(spaceId, settings.proxyOf(spaceId))
+  })
+  ipcMain.handle(IPC.checkExit, (_e, spaceId: string) => checkExit(spaceId))
   ipcMain.handle(IPC.settingsLocation, async (_e, spaceId: string, location) => {
     settings.setLocation(spaceId, location)
     manager.setAcceptLanguage(spaceId, location?.locale ?? null)
@@ -169,6 +177,18 @@ function wireIpc(): void {
       .applyLocation({ token: manager.activeTabToken(spaceId), url: manager.urlOf(spaceId) }, location)
       .catch(() => {})
   })
+}
+
+/** Where this Space's traffic actually comes out, fetched through that Space's own session so the
+ *  answer reflects its proxy. The only honest way to confirm a proxy is working. */
+async function checkExit(spaceId: string): Promise<{ ip: string; country?: string; city?: string } | { error: string }> {
+  try {
+    const res = await session.fromPartition(`persist:space-${spaceId}`).fetch('https://ipinfo.io/json')
+    const data = (await res.json()) as { ip: string; country?: string; city?: string }
+    return { ip: data.ip, country: data.country, city: data.city }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 function writeHandshake(controlPort: number): void {
@@ -226,6 +246,16 @@ app.on('child-process-gone', (_event, details) => {
   if (details.type !== 'Utility' || details.serviceName !== 'network.mojom.NetworkService') return
   console.error('[iris] network service gone:', details.reason, '- reloading tabs')
   setTimeout(() => manager?.reloadAllTabs(), 1500)
+})
+
+// proxies that require credentials ask here; answer with the password stored for that Space
+app.on('login', (event, webContents, details, authInfo, callback) => {
+  if (!authInfo.isProxy) return
+  const spaceId = manager?.spaceIdForWebContents(webContents?.id ?? -1)
+  const proxy = spaceId ? settings.proxyOf(spaceId) : null
+  if (!spaceId || !proxy?.username) return
+  event.preventDefault()
+  callback(proxy.username, settings.passwordOf(spaceId))
 })
 
 app.on('window-all-closed', () => {

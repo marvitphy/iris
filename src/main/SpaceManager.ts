@@ -11,6 +11,7 @@ import type {
   HandoffState,
   PersistedState,
   SpaceInfo,
+  SpaceProxy,
   TabInfo,
 } from '../shared/types'
 
@@ -293,6 +294,28 @@ export class SpaceManager extends EventEmitter {
 
   kindOf(id: string): 'human' | 'agent' | null {
     return this.spaces.get(id)?.kind ?? null
+  }
+
+  /**
+   * Route this Space's traffic through a proxy. This is what actually changes the IP a site sees;
+   * geolocation and timezone overrides only cover what the page can ask the browser.
+   */
+  /** Which Space a webContents belongs to, so proxy auth prompts can find the right credentials. */
+  spaceIdForWebContents(id: number): string | null {
+    for (const space of this.spaces.values()) {
+      if (space.tabs.some((t) => !t.view.webContents.isDestroyed() && t.view.webContents.id === id)) return space.id
+    }
+    return null
+  }
+
+  async applyProxy(spaceId: string, proxy: SpaceProxy | null): Promise<void> {
+    const sess = session.fromPartition(`persist:space-${spaceId}`)
+    if (!proxy?.host) {
+      await sess.setProxy({ mode: 'system' })
+      return
+    }
+    const rule = `${proxy.scheme}://${proxy.host}:${proxy.port}`
+    await sess.setProxy({ proxyRules: rule, proxyBypassRules: '<local>' })
   }
 
   /** Send this Space's requests with a given Accept-Language, part of presenting a coherent locale. */

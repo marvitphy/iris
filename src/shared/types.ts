@@ -89,6 +89,8 @@ export interface IrisApi {
   getSettings(): Promise<IrisSettings>
   setDns(mode: IrisSettings['dns']): Promise<void>
   setSpaceLocation(spaceId: string, location: SpaceLocation | null): Promise<void>
+  setSpaceProxy(spaceId: string, proxy: (SpaceProxy & { password?: string }) | null): Promise<void>
+  checkExit(spaceId: string): Promise<{ ip: string; country?: string; city?: string } | { error: string }>
   getIntegration(): Promise<IntegrationStatus>
   installIntegration(): Promise<{ ok: boolean; error?: string }>
   onSpacesChanged(cb: (spaces: SpaceInfo[]) => void): () => void
@@ -118,10 +120,21 @@ export interface SpaceLocation {
   locale: string
 }
 
+export interface SpaceProxy {
+  scheme: 'http' | 'https' | 'socks5'
+  host: string
+  port: number
+  username?: string
+  /** never sent to the renderer: only a flag saying one is stored */
+  hasPassword?: boolean
+}
+
 export interface IrisSettings {
   dns: 'system' | 'google' | 'cloudflare' | 'quad9' | 'adguard' | 'opendns' | 'mullvad'
   /** per-Space location override: what the sites in that Space think your location is */
   locations: Record<string, SpaceLocation>
+  /** per-Space proxy: this Space's traffic leaves through it, which is what changes the IP */
+  proxies: Record<string, SpaceProxy>
 }
 
 export interface MemoryItem {
@@ -171,4 +184,6 @@ export const IPC = {
   openSettings: 'ui:open-settings',
   integrationGet: 'integration:get',
   integrationInstall: 'integration:install',
+  settingsProxy: 'settings:proxy',
+  checkExit: 'settings:check-exit',
 } as const

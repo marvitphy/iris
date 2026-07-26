@@ -2,6 +2,7 @@ import { BaseWindow, Menu, WebContentsView, app, clipboard, session } from 'elec
 import { EventEmitter } from 'node:events'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { stampScript } from './marker'
 import type { ContextMenuParams, Input, MenuItemConstructorOptions, Session, WebContents } from 'electron'
 import type {
   ActivityKind,
@@ -128,7 +129,7 @@ export class SpaceManager extends EventEmitter {
     // Stamp a per-tab token in the page's main world so the engine can target THIS tab even when
     // another tab sits on the same URL. Re-stamped on every document.
     const stamp = (): void => {
-      void wc.executeJavaScript(`window.__irisTab=${JSON.stringify(tabId)};0`).catch(() => {})
+      void wc.executeJavaScript(stampScript(tabId)).catch(() => {})
     }
     wc.on('dom-ready', stamp)
     wc.on('did-finish-load', stamp)

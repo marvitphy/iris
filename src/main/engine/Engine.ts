@@ -1,4 +1,5 @@
 import { chromium, type Browser, type Page } from 'playwright-core'
+import { READ_MARKER } from '../marker'
 
 const ACTION_TIMEOUT = 8000
 /** minimum gap between agent interactions, so we move at a human cadence */
@@ -12,7 +13,7 @@ export interface ActionResult {
 
 /**
  * Identifies which page to act on. `token` is the per-tab marker SpaceManager stamps into the page
- * (`window.__irisTab`), so two tabs on the SAME url are never confused; `url` is the fallback for
+ * , so two tabs on the SAME url are never confused; `url` is the fallback for
  * pages that haven't been stamped yet (mid-navigation, about:blank).
  */
 export interface PageTarget {
@@ -200,7 +201,7 @@ export class Engine {
   private async tokenOf(page: Page): Promise<string> {
     const cached = this.tokenCache.get(page)
     if (cached) return cached
-    const token = await page.evaluate<string>('window.__irisTab || ""').catch(() => '')
+    const token = await page.evaluate<string>(READ_MARKER).catch(() => '')
     if (token) this.tokenCache.set(page, token)
     return token
   }

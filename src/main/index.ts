@@ -17,9 +17,7 @@ app.commandLine.appendSwitch('remote-allow-origins', '*') // Chromium M111+ need
 
 // Electron appends "Iris/x.y.z Electron/x.y.z" to the UA. Iris *is* Chromium, and sites that gate
 // features on the UA break or degrade when they see an unknown client, so present as plain Chromium.
-app.userAgentFallback = app.userAgentFallback
-  .replace(/\sIris\/[\d.]+/, '')
-  .replace(/\sElectron\/[\d.]+/, '')
+app.userAgentFallback = app.userAgentFallback.replace(/\s(?:iris|Electron)\/[\d.]+/gi, '')
 
 let manager: SpaceManager
 let engine: Engine

@@ -2,6 +2,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
 import { AURA_SHOW, AURA_HIDE, auraRipple } from './aura'
 
 const AURA_IDLE_MS = 4000
+const ACTION_TIMEOUT = 8000
 
 export interface ActionResult {
   ok: boolean
@@ -10,33 +11,26 @@ export interface ActionResult {
 }
 
 /**
- * The automation engine. Connects to Iris's OWN Chromium (the Electron process) over
- * CDP and drives Space pages with Playwright — the loop proven in Phase 0:
- * connectOverCDP + ariaSnapshot(mode:'ai') refs resolved via the aria-ref= engine.
- * Pages are routed by the Space's current URL (main supplies it). Known MVP limitation:
- * two Spaces on the exact same URL are ambiguous — tracked for targetId-based routing later.
+ * Identifies which page to act on. `token` is the per-tab marker SpaceManager stamps into the page
+ * (`window.__irisTab`), so two tabs on the SAME url are never confused; `url` is the fallback for
+ * pages that haven't been stamped yet (mid-navigation, about:blank).
+ */
+export interface PageTarget {
+  token: string
+  url: string
+}
+
+/**
+ * The automation engine. Connects to Iris's OWN Chromium (the Electron process) over CDP and drives
+ * Space pages with Playwright: connectOverCDP + ariaSnapshot(mode:'ai') refs resolved via the
+ * aria-ref= selector engine. Pages are routed by tab token first, url second.
  */
 export class Engine {
   private browser: Browser | null = null
   private auraTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private pagesByToken = new Map<string, Page>()
 
   constructor(private cdpPort: number) {}
-
-  /** Show the agent-activity aura on a Space page and refresh its idle auto-hide timer. */
-  async pulse(url: string): Promise<void> {
-    const page = this.find(url)
-    if (!page) return
-    await page.evaluate(AURA_SHOW).catch(() => {})
-    const prev = this.auraTimers.get(url)
-    if (prev) clearTimeout(prev)
-    this.auraTimers.set(
-      url,
-      setTimeout(() => {
-        this.auraTimers.delete(url)
-        void page.evaluate(AURA_HIDE).catch(() => {})
-      }, AURA_IDLE_MS),
-    )
-  }
 
   async connect(): Promise<void> {
     if (this.browser) return
@@ -45,132 +39,158 @@ export class Engine {
     this.browser = await chromium.connectOverCDP(endpoint, { noDefaults: true })
   }
 
-  async snapshot(url: string): Promise<string> {
-    const page = await this.requirePage(url)
+  /** Show the agent-activity aura on a Space page and refresh its idle auto-hide timer. */
+  async pulse(target: PageTarget): Promise<void> {
+    const page = await this.find(target)
+    if (!page) return
+    await page.evaluate(AURA_SHOW).catch(() => {})
+    const prev = this.auraTimers.get(target.token)
+    if (prev) clearTimeout(prev)
+    this.auraTimers.set(
+      target.token,
+      setTimeout(() => {
+        this.auraTimers.delete(target.token)
+        void page.evaluate(AURA_HIDE).catch(() => {})
+      }, AURA_IDLE_MS),
+    )
+  }
+
+  async snapshot(target: PageTarget): Promise<string> {
+    const page = await this.requirePage(target)
     await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {})
     return page.locator('body').ariaSnapshot({ mode: 'ai' })
   }
 
-  async click(url: string, ref: string): Promise<ActionResult> {
-    const page = await this.requirePage(url)
+  async click(target: PageTarget, ref: string): Promise<ActionResult> {
+    const page = await this.requirePage(target)
     const loc = page.locator(`aria-ref=${ref}`)
     const box = await loc.boundingBox().catch(() => null)
     if (box) await page.evaluate(auraRipple(box.x + box.width / 2, box.y + box.height / 2)).catch(() => {})
-    await loc.click({ timeout: 8000 })
+    await loc.click({ timeout: ACTION_TIMEOUT })
     return this.settle(page)
   }
 
-  async type(url: string, ref: string, text: string, submit = false): Promise<ActionResult> {
-    const page = await this.requirePage(url)
+  /**
+   * Fill an element. Rich-text editors (contenteditable: Slate, Quill, X's composer) often ignore a
+   * programmatic value set, so we verify the text actually landed and fall back to real keystrokes.
+   */
+  async type(target: PageTarget, ref: string, text: string, submit = false): Promise<ActionResult> {
+    const page = await this.requirePage(target)
     const loc = page.locator(`aria-ref=${ref}`)
-    await loc.fill(text, { timeout: 8000 })
+    await loc.fill(text, { timeout: ACTION_TIMEOUT }).catch(() => {})
+    const landed = await loc
+      .evaluate((el: { value?: string; textContent?: string | null }) => (el.value ?? el.textContent ?? '').trim())
+      .catch(() => '')
+    if (!landed.includes(text.trim().slice(0, 24))) {
+      await loc.click({ timeout: ACTION_TIMEOUT }).catch(() => {})
+      await page.keyboard.type(text, { delay: 8 })
+    }
     if (submit) await page.keyboard.press('Enter')
     return this.settle(page)
   }
 
+  async pressKey(target: PageTarget, key: string): Promise<ActionResult> {
+    const page = await this.requirePage(target)
+    await page.keyboard.press(key)
+    return this.settle(page)
+  }
+
+  async selectOption(target: PageTarget, ref: string, value: string): Promise<ActionResult> {
+    const page = await this.requirePage(target)
+    const loc = page.locator(`aria-ref=${ref}`)
+    await loc.selectOption({ label: value }, { timeout: ACTION_TIMEOUT }).catch(async () => {
+      await loc.selectOption(value, { timeout: ACTION_TIMEOUT })
+    })
+    return this.settle(page)
+  }
+
+  async uploadFile(target: PageTarget, ref: string, paths: string[]): Promise<ActionResult> {
+    const page = await this.requirePage(target)
+    await page.locator(`aria-ref=${ref}`).setInputFiles(paths, { timeout: ACTION_TIMEOUT })
+    return this.settle(page)
+  }
+
   /** Run agent JS in the page and return the serializable result — dense extraction in one call. */
-  async evaluate(url: string, expression: string): Promise<unknown> {
-    const page = await this.requirePage(url)
+  async evaluate(target: PageTarget, expression: string): Promise<unknown> {
+    const page = await this.requirePage(target)
     return page.evaluate(expression)
   }
 
   /** PNG screenshot of the page as base64 — gives the agent vision on canvas/visual pages. */
-  async screenshot(url: string, fullPage = false): Promise<string> {
-    const page = await this.requirePage(url)
+  async screenshot(target: PageTarget, fullPage = false): Promise<string> {
+    const page = await this.requirePage(target)
     const buf = await page.screenshot({ fullPage, type: 'png' })
     return buf.toString('base64')
   }
 
   /** Bring an element into the user's view: scroll it into view and flash a purple highlight over it
    *  (via the CDP inspector overlay — no page injection, so it works even under strict CSP like X). */
-  async reveal(url: string, ref: string): Promise<ActionResult> {
-    const page = await this.requirePage(url)
+  async reveal(target: PageTarget, ref: string): Promise<ActionResult> {
+    const page = await this.requirePage(target)
     const loc = page.locator(`aria-ref=${ref}`)
     // smooth-scroll so the element lands ~160px from the top — breathing room above, easy to read
     const pre = await loc.boundingBox().catch(() => null)
     if (pre) {
-      const delta = Math.round(pre.y - 160)
-      await page.evaluate(`window.scrollBy({top:${delta},left:0,behavior:'smooth'})`).catch(() => {})
+      await page.evaluate(`window.scrollBy({top:${Math.round(pre.y - 160)},left:0,behavior:'smooth'})`).catch(() => {})
       await page.waitForTimeout(550)
     }
     const box = await loc.boundingBox().catch(() => null)
-    if (box) {
-      try {
-        const client = await page.context().newCDPSession(page)
-        await client.send('Overlay.enable')
-        await client.send('Overlay.highlightRect', {
-          x: Math.round(box.x),
-          y: Math.round(box.y),
-          width: Math.round(box.width),
-          height: Math.round(box.height),
-          color: { r: 176, g: 107, b: 255, a: 0.22 },
-          outlineColor: { r: 176, g: 107, b: 255, a: 0.9 },
-        })
-        setTimeout(() => {
-          client.send('Overlay.hideHighlight').catch(() => {})
-          client.detach().catch(() => {})
-        }, 2800)
-      } catch {
-        // overlay unavailable — scroll already brought it into view
-      }
-    }
+    if (box) await this.flashHighlight(page, box)
     return this.settle(page)
   }
 
-  async scroll(url: string, dy: number): Promise<ActionResult> {
-    const page = await this.requirePage(url)
+  async scroll(target: PageTarget, dy: number): Promise<ActionResult> {
+    const page = await this.requirePage(target)
     await page.evaluate(`window.scrollBy({top:${Math.round(dy)},left:0,behavior:'smooth'})`)
     await page.waitForTimeout(500)
     return this.settle(page)
   }
 
-  async readText(url: string, ref?: string): Promise<string> {
-    const page = await this.requirePage(url)
+  async readText(target: PageTarget, ref?: string): Promise<string> {
+    const page = await this.requirePage(target)
     const loc = ref ? page.locator(`aria-ref=${ref}`) : page.locator('body')
-    return (await loc.innerText({ timeout: 8000 })).trim()
+    return (await loc.innerText({ timeout: ACTION_TIMEOUT })).trim()
+  }
+
+  /** Readable main content as markdown: the article body, headings and links kept, chrome dropped.
+   *  Far fewer tokens than raw page text, and keeps the structure the agent reasons about. */
+  async scrape(target: PageTarget): Promise<string> {
+    const page = await this.requirePage(target)
+    return page.evaluate<string>(SCRAPE_SCRIPT).catch(() => '')
   }
 
   /** Read the text currently visible in the viewport — i.e. what the user is looking at right now. */
-  async readViewport(url: string): Promise<string> {
-    const page = await this.requirePage(url)
-    const script = `(() => {
-      const vh = window.innerHeight, vw = window.innerWidth;
-      const out = []; const seen = new Set();
-      const els = document.body.querySelectorAll('h1,h2,h3,h4,h5,p,li,a,button,article,td,th,blockquote,[role=heading],[role=button],[role=link],[role=article]');
-      for (const el of els) {
-        const r = el.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue;
-        if (r.width < 6 || r.height < 6) continue;
-        let t = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ');
-        if (!t || t.length < 2) continue;
-        t = t.slice(0, 280);
-        if (seen.has(t)) continue; seen.add(t);
-        out.push(t);
-        if (out.join('\\n').length > 7000) break;
-      }
-      return out.join('\\n');
-    })()`
-    const text = await page.evaluate<string>(script).catch(() => '')
-    return text
+  async readViewport(target: PageTarget): Promise<string> {
+    const page = await this.requirePage(target)
+    return page.evaluate<string>(VIEWPORT_SCRIPT).catch(() => '')
   }
 
   /** Heuristic check for a wall the human must clear (captcha / OTP / login). Returns a reason or null. */
-  async detectHandoff(url: string): Promise<string | null> {
-    const page = this.find(url)
+  async detectHandoff(target: PageTarget): Promise<string | null> {
+    const page = await this.find(target)
     if (!page) return null
-    const script = `(() => {
-      const q = (s) => document.querySelector(s);
-      const txt = (document.body && document.body.innerText || '').slice(0, 6000).toLowerCase();
-      if (q('iframe[src*="recaptcha"]') || q('iframe[src*="hcaptcha"]') || q('iframe[src*="challenges.cloudflare"]')
-          || q('.g-recaptcha') || q('.h-captcha') || /verify you are human|are you a robot|n[aã]o sou um rob[oô]|sou humano|prove you'?re human/.test(txt))
-        return 'captcha';
-      if (q('input[autocomplete="one-time-code"]') || /verification code|one-time code|c[oó]digo de verifica|two-factor|autentica[cç][aã]o de dois fatores|enter the code|c[oó]digo enviado/.test(txt))
-        return 'verification code (OTP)';
-      const pw = q('input[type=password]');
-      if (pw && pw.offsetParent !== null) return 'login required';
-      return null;
-    })()`
-    return page.evaluate<string | null>(script).catch(() => null)
+    return page.evaluate<string | null>(HANDOFF_SCRIPT).catch(() => null)
+  }
+
+  private async flashHighlight(page: Page, box: { x: number; y: number; width: number; height: number }): Promise<void> {
+    try {
+      const client = await page.context().newCDPSession(page)
+      await client.send('Overlay.enable')
+      await client.send('Overlay.highlightRect', {
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        width: Math.round(box.width),
+        height: Math.round(box.height),
+        color: { r: 176, g: 107, b: 255, a: 0.22 },
+        outlineColor: { r: 176, g: 107, b: 255, a: 0.9 },
+      })
+      setTimeout(() => {
+        client.send('Overlay.hideHighlight').catch(() => {})
+        client.detach().catch(() => {})
+      }, 2800)
+    } catch {
+      // overlay unavailable — the scroll already brought it into view
+    }
   }
 
   private async settle(page: Page): Promise<ActionResult> {
@@ -178,14 +198,27 @@ export class Engine {
     return { ok: true, url: page.url(), snapshot: await page.locator('body').ariaSnapshot({ mode: 'ai' }) }
   }
 
-  private find(url: string): Page | null {
+  private async tokenOf(page: Page): Promise<string> {
+    return page.evaluate<string>('window.__irisTab || ""').catch(() => '')
+  }
+
+  /** Resolve the page for a target: cached token match, then a full scan, then url fallback. */
+  private async find(target: PageTarget): Promise<Page | null> {
     if (!this.browser) return null
+    const cached = this.pagesByToken.get(target.token)
+    if (cached && !cached.isClosed() && (await this.tokenOf(cached)) === target.token) return cached
+
+    let urlMatch: Page | null = null
     for (const ctx of this.browser.contexts()) {
       for (const page of ctx.pages()) {
-        if (page.url() === url) return page
+        if (page.isClosed()) continue
+        const token = await this.tokenOf(page)
+        if (token) this.pagesByToken.set(token, page)
+        if (token && token === target.token) return page
+        if (!urlMatch && page.url() === target.url) urlMatch = page
       }
     }
-    return null
+    return urlMatch
   }
 
   private async reconnect(): Promise<void> {
@@ -195,21 +228,21 @@ export class Engine {
       // disconnecting a CDP attach can throw; ignore
     }
     this.browser = null
+    this.pagesByToken.clear()
     await this.connect()
   }
 
   /**
-   * Resolve the Playwright page for a Space URL. Pages created by Electron after the
-   * initial CDP attach aren't in the cached context tree, so on a miss we reconnect
-   * (re-enumerating all current targets) and retry once.
+   * Resolve the page for a target. Pages created by Electron after the initial CDP attach aren't in
+   * the cached context tree, so on a miss we reconnect (re-enumerating targets) and retry once.
    */
-  private async requirePage(url: string): Promise<Page> {
-    const hit = this.find(url)
+  private async requirePage(target: PageTarget): Promise<Page> {
+    const hit = await this.find(target)
     if (hit) return hit
     await this.reconnect()
-    const retry = this.find(url)
+    const retry = await this.find(target)
     if (retry) return retry
-    throw new Error(`no page found for url ${url}`)
+    throw new Error(`no page found for tab ${target.token} (${target.url})`)
   }
 
   private async waitForCdp(endpoint: string, timeoutMs = 15000): Promise<void> {
@@ -226,3 +259,74 @@ export class Engine {
     throw new Error('Iris CDP endpoint never came up')
   }
 }
+
+const VIEWPORT_SCRIPT = `(() => {
+  const vh = window.innerHeight, vw = window.innerWidth;
+  const out = []; const seen = new Set();
+  const els = document.body.querySelectorAll('h1,h2,h3,h4,h5,p,li,a,button,article,td,th,blockquote,[role=heading],[role=button],[role=link],[role=article]');
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue;
+    if (r.width < 6 || r.height < 6) continue;
+    let t = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ');
+    if (!t || t.length < 2) continue;
+    t = t.slice(0, 280);
+    if (seen.has(t)) continue; seen.add(t);
+    out.push(t);
+    if (out.join('\\n').length > 7000) break;
+  }
+  return out.join('\\n');
+})()`
+
+const HANDOFF_SCRIPT = `(() => {
+  const q = (s) => document.querySelector(s);
+  const txt = (document.body && document.body.innerText || '').slice(0, 6000).toLowerCase();
+  if (q('iframe[src*="recaptcha"]') || q('iframe[src*="hcaptcha"]') || q('iframe[src*="challenges.cloudflare"]')
+      || q('.g-recaptcha') || q('.h-captcha') || /verify you are human|are you a robot|prove you'?re human/.test(txt))
+    return 'captcha';
+  if (q('input[autocomplete="one-time-code"]') || /verification code|one-time code|two-factor|enter the code/.test(txt))
+    return 'verification code (OTP)';
+  const pw = q('input[type=password]');
+  if (pw && pw.offsetParent !== null) return 'login required';
+  return null;
+})()`
+
+/** Readability-lite: pick the densest content container, serialize it to markdown. */
+const SCRAPE_SCRIPT = `(() => {
+  const strip = 'script,style,noscript,svg,nav,footer,header,aside,form,iframe,[aria-hidden="true"]';
+  const scoreOf = (el) => {
+    const text = el.innerText || '';
+    if (text.length < 140) return -1;
+    const links = el.querySelectorAll('a').length;
+    const density = links / Math.max(1, text.length / 100);
+    return text.length * (density > 1.2 ? 0.25 : 1);
+  };
+  let best = document.body, bestScore = -1;
+  const candidates = document.querySelectorAll('article,main,[role=main],.content,.post,.article,#content,section,div');
+  for (const el of candidates) {
+    const s = scoreOf(el);
+    if (s > bestScore) { bestScore = s; best = el; }
+  }
+  const root = best.cloneNode(true);
+  root.querySelectorAll(strip).forEach((n) => n.remove());
+  const lines = [];
+  const walk = (node) => {
+    for (const el of node.children) {
+      const tag = el.tagName.toLowerCase();
+      const text = (el.innerText || '').trim().replace(/\\s+\\n/g, '\\n');
+      if (!text) continue;
+      if (/^h[1-6]$/.test(tag)) { lines.push('\\n' + '#'.repeat(+tag[1]) + ' ' + text.replace(/\\s+/g, ' ')); continue; }
+      if (tag === 'li') { lines.push('- ' + text.replace(/\\s+/g, ' ')); continue; }
+      if (tag === 'blockquote') { lines.push('> ' + text.replace(/\\s+/g, ' ')); continue; }
+      if (tag === 'pre') { lines.push('\\n\`\`\`\\n' + text + '\\n\`\`\`'); continue; }
+      if (tag === 'a' && el.href) { lines.push('[' + text.replace(/\\s+/g, ' ') + '](' + el.href + ')'); continue; }
+      if (tag === 'p') { lines.push(text.replace(/\\s+/g, ' ')); continue; }
+      if (el.children.length) { walk(el); continue; }
+      lines.push(text.replace(/\\s+/g, ' '));
+    }
+  };
+  walk(root);
+  const title = (document.title || '').trim();
+  const body = lines.filter(Boolean).join('\\n').replace(/\\n{3,}/g, '\\n\\n').slice(0, 12000);
+  return (title ? '# ' + title + '\\n\\n' : '') + body;
+})()`

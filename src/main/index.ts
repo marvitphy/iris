@@ -49,6 +49,18 @@ function createWindow(): void {
     win.focus()
     manager.activate(id)
   })
+  manager.on('focus-omnibox', () => {
+    if (!win.webContents.isDestroyed()) {
+      win.webContents.focus()
+      win.webContents.send(IPC.focusOmnibox)
+    }
+  })
+  manager.on('open-history', () => {
+    if (!win.webContents.isDestroyed()) {
+      win.webContents.focus()
+      win.webContents.send(IPC.openHistory)
+    }
+  })
   manager.on('approval', ({ id, action }: { id: string; action: string }) => {
     if (Notification.isSupported()) {
       new Notification({ title: 'Iris: approve action?', body: action }).show()
@@ -106,6 +118,7 @@ function wireIpc(): void {
     manager.decideApproval(spaceId, approved),
   )
   ipcMain.handle(IPC.setAutonomous, (_e, spaceId: string, on: boolean) => manager.setAutonomous(spaceId, on))
+  ipcMain.handle(IPC.historyGet, (_e, spaceId: string) => manager.historyOf(spaceId))
 }
 
 function writeHandshake(controlPort: number): void {

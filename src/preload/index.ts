@@ -26,6 +26,17 @@ const api: IrisApi = {
     ipcRenderer.on(IPC.spacesChanged, handler)
     return () => ipcRenderer.removeListener(IPC.spacesChanged, handler)
   },
+  getHistory: (spaceId) => ipcRenderer.invoke(IPC.historyGet, spaceId),
+  onFocusOmnibox: (cb) => {
+    const handler = (): void => cb()
+    ipcRenderer.on(IPC.focusOmnibox, handler)
+    return () => ipcRenderer.removeListener(IPC.focusOmnibox, handler)
+  },
+  onOpenHistory: (cb) => {
+    const handler = (): void => cb()
+    ipcRenderer.on(IPC.openHistory, handler)
+    return () => ipcRenderer.removeListener(IPC.openHistory, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('iris', api)

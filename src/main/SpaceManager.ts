@@ -1,7 +1,17 @@
-import { BaseWindow, WebContentsView, session } from 'electron'
+import { BaseWindow, Menu, WebContentsView, app, clipboard, session } from 'electron'
 import { EventEmitter } from 'node:events'
-import type { WebContents } from 'electron'
-import type { ActivityKind, ApprovalRequest, HandoffState, PersistedState, SpaceInfo, TabInfo } from '../shared/types'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import type { ContextMenuParams, Input, MenuItemConstructorOptions, Session, WebContents } from 'electron'
+import type {
+  ActivityKind,
+  ApprovalRequest,
+  DownloadEntry,
+  HandoffState,
+  PersistedState,
+  SpaceInfo,
+  TabInfo,
+} from '../shared/types'
 
 type Decision = 'approved' | 'rejected' | 'timeout'
 interface Pending {
@@ -49,6 +59,10 @@ export class SpaceManager extends EventEmitter {
   private busy = new Map<string, ReturnType<typeof setTimeout>>()
   private handoffs = new Map<string, HandoffState>()
   private autonomous = new Set<string>()
+  private statuses = new Map<string, string>()
+  private downloads = new Map<string, DownloadEntry[]>()
+  private history = new Map<string, { url: string; title: string; at: number }[]>()
+  private wiredPartitions = new Set<string>()
   private activity = new Map<string, { kind: ActivityKind; text: string; at: number }[]>()
   private approvals = new Map<string, Pending>()
 
@@ -76,9 +90,10 @@ export class SpaceManager extends EventEmitter {
     const space = this.spaces.get(spaceId)
     if (!space) return ''
     const tabId = `${spaceId}-t${++space.tabSeq}`
-    const view = new WebContentsView({
-      webPreferences: { session: session.fromPartition(`persist:space-${spaceId}`) },
-    })
+    const partition = `persist:space-${spaceId}`
+    const spaceSession = session.fromPartition(partition)
+    this.wireDownloads(spaceId, partition, spaceSession)
+    const view = new WebContentsView({ webPreferences: { session: spaceSession } })
     withRadius(view)
     const tab: Tab = { id: tabId, view, favicon: null }
     const wc = view.webContents
@@ -92,6 +107,24 @@ export class SpaceManager extends EventEmitter {
     wc.on('page-favicon-updated', (_e, favicons) => {
       tab.favicon = favicons[0] ?? null
       emit()
+    })
+    // Stamp a per-tab token in the page's main world so the engine can target THIS tab even when
+    // another tab sits on the same URL. Re-stamped on every document.
+    const stamp = (): void => {
+      void wc.executeJavaScript(`window.__irisTab=${JSON.stringify(tabId)};0`).catch(() => {})
+    }
+    wc.on('dom-ready', stamp)
+    wc.on('did-finish-load', stamp)
+    wc.on('before-input-event', (event, input) => {
+      if (this.handleShortcut(spaceId, input)) event.preventDefault()
+    })
+    wc.on('context-menu', (_e, params) => this.showContextMenu(spaceId, wc, params))
+    wc.on('did-navigate', () => this.recordHistory(spaceId, wc))
+    wc.on('page-title-updated', () => this.recordHistory(spaceId, wc))
+    // links that ask for a new window/tab open as a tab in this Space instead
+    wc.setWindowOpenHandler(({ url: target }) => {
+      this.addTab(spaceId, target)
+      return { action: 'deny' }
     })
 
     space.tabs.push(tab)
@@ -155,6 +188,9 @@ export class SpaceManager extends EventEmitter {
     this.activity.delete(id)
     this.clearApproval(id)
     this.autonomous.delete(id)
+    this.statuses.delete(id)
+    this.downloads.delete(id)
+    this.history.delete(id)
     clearTimeout(this.busy.get(id))
     this.busy.delete(id)
     if (this.activeId === id) {
@@ -198,6 +234,115 @@ export class SpaceManager extends EventEmitter {
 
   kindOf(id: string): 'human' | 'agent' | null {
     return this.spaces.get(id)?.kind ?? null
+  }
+
+  /** The token stamped into the active tab's page, used to target THIS tab (not just its URL). */
+  activeTabToken(spaceId: string): string {
+    return this.activeTab(spaceId)?.id ?? ''
+  }
+
+  setStatus(id: string, text: string): void {
+    if (!this.spaces.has(id)) return
+    const t = text.trim().slice(0, 120)
+    if (t) this.statuses.set(id, t)
+    else this.statuses.delete(id)
+    this.emitChanged()
+  }
+
+  historyOf(id: string): { url: string; title: string; at: number }[] {
+    return this.history.get(id) ?? []
+  }
+
+  downloadsOf(id: string): DownloadEntry[] {
+    return this.downloads.get(id) ?? []
+  }
+
+  private recordHistory(spaceId: string, wc: WebContents): void {
+    const url = wc.getURL()
+    if (!url || url === 'about:blank') return
+    const list = this.history.get(spaceId) ?? []
+    const last = list[list.length - 1]
+    if (last && last.url === url) {
+      last.title = wc.getTitle()
+      return
+    }
+    list.push({ url, title: wc.getTitle(), at: Date.now() })
+    if (list.length > 200) list.shift()
+    this.history.set(spaceId, list)
+  }
+
+  /** Downloads for a Space land in Documents/Iris and are recorded so the agent can report the path. */
+  private wireDownloads(spaceId: string, partition: string, sess: Session): void {
+    if (this.wiredPartitions.has(partition)) return
+    this.wiredPartitions.add(partition)
+    sess.on('will-download', (_event, item) => {
+      const dir = join(app.getPath('documents'), 'Iris')
+      mkdirSync(dir, { recursive: true })
+      const target = join(dir, item.getFilename())
+      item.setSavePath(target)
+      item.once('done', (_e, state) => {
+        if (state !== 'completed') return
+        const list = this.downloads.get(spaceId) ?? []
+        list.push({ filename: item.getFilename(), path: target, at: Date.now() })
+        if (list.length > 20) list.shift()
+        this.downloads.set(spaceId, list)
+        this.emitChanged()
+      })
+    })
+  }
+
+  private showContextMenu(spaceId: string, wc: WebContents, params: ContextMenuParams): void {
+    const items: MenuItemConstructorOptions[] = []
+    if (params.linkURL) {
+      items.push(
+        { label: 'Open link in new tab', click: () => this.addTab(spaceId, params.linkURL) },
+        { label: 'Copy link address', click: () => clipboard.writeText(params.linkURL) },
+        { type: 'separator' },
+      )
+    }
+    if (params.selectionText) {
+      items.push(
+        { label: 'Copy', role: 'copy' },
+        {
+          label: `Search for "${params.selectionText.slice(0, 24)}"`,
+          click: () => this.addTab(spaceId, `https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`),
+        },
+        { type: 'separator' },
+      )
+    }
+    if (params.isEditable) {
+      items.push({ label: 'Paste', role: 'paste' }, { label: 'Select all', role: 'selectAll' }, { type: 'separator' })
+    }
+    items.push(
+      { label: 'Back', enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
+      { label: 'Forward', enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
+      { label: 'Reload', click: () => wc.reload() },
+      { type: 'separator' },
+      { label: 'Inspect element', click: () => wc.inspectElement(params.x, params.y) },
+    )
+    Menu.buildFromTemplate(items).popup()
+  }
+
+  /** Browser keyboard shortcuts. Returns true when the key was handled (caller prevents default). */
+  private handleShortcut(spaceId: string, input: Input): boolean {
+    if (input.type !== 'keyDown') return false
+    const prefix = input.control || input.meta ? 'mod+' : input.alt ? 'alt+' : ''
+    const action = SHORTCUTS[prefix + input.key.toLowerCase()]
+    if (!action) return false
+    action(this, spaceId)
+    return true
+  }
+
+  toggleDevToolsShortcut(spaceId: string): void {
+    const wc = this.activeWebContents(spaceId)
+    if (!wc) return
+    if (wc.isDevToolsOpened()) wc.closeDevTools()
+    else wc.openDevTools({ mode: 'detach' })
+  }
+
+  closeActiveTabShortcut(spaceId: string): void {
+    const tab = this.activeTab(spaceId)
+    if (tab) this.closeTab(spaceId, tab.id)
   }
 
   renameSpace(id: string, label: string): void {
@@ -333,6 +478,8 @@ export class SpaceManager extends EventEmitter {
         active: id === this.activeId,
         busy: this.busy.has(id),
         autonomous: this.autonomous.has(id),
+        status: this.statuses.get(id) ?? null,
+        downloads: (this.downloads.get(id) ?? []).slice(-5),
         tabs,
         handoff: this.handoffs.get(id) ?? null,
         approval: ((): ApprovalRequest | null => {
@@ -420,6 +567,22 @@ export class SpaceManager extends EventEmitter {
   private emitChanged(): void {
     this.emit('changed', this.list())
   }
+}
+
+/** Keyboard shortcuts, keyed by `mod+`/`alt+` prefix + lowercased key. */
+const SHORTCUTS: Record<string, (m: SpaceManager, spaceId: string) => void> = {
+  'mod+l': (m) => m.emit('focus-omnibox'),
+  'mod+t': (m, id) => {
+    m.addTab(id, 'about:blank')
+    m.emit('focus-omnibox')
+  },
+  'mod+w': (m, id) => m.closeActiveTabShortcut(id),
+  'mod+r': (m, id) => m.reload(id),
+  f5: (m, id) => m.reload(id),
+  f12: (m, id) => m.toggleDevToolsShortcut(id),
+  'alt+arrowleft': (m, id) => m.back(id),
+  'alt+arrowright': (m, id) => m.forward(id),
+  'mod+h': (m) => m.emit('open-history'),
 }
 
 function withRadius(view: WebContentsView): void {

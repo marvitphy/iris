@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IrisApi, SpaceInfo } from '../../shared/types'
 import { Back, Forward, Reload, Plus, Close, WinMin, WinMax, User, Sparkle } from './Icons'
 import { NebulaGlow } from './NebulaGlow'
+import { Modal } from './Modal'
+import type { HistoryEntry } from '../../shared/types'
 
 const iris = (window as unknown as { iris: IrisApi }).iris
 
@@ -58,10 +60,13 @@ export function App(): React.JSX.Element {
   const [spaces, setSpaces] = useState<SpaceInfo[]>([])
   const [tip, setTip] = useState<{ text: string; x: number; y: number; place: 'top' | 'bottom' } | null>(null)
   const [editingName, setEditingName] = useState(false)
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null)
   const [omni, setOmni] = useState('')
   const omniFocused = useRef(false)
   const omniRef = useRef<HTMLInputElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
+  const spacesRef = useRef<SpaceInfo[]>([])
+  spacesRef.current = spaces
 
   const space = useMemo(() => spaces.find((s) => s.active) ?? null, [spaces])
   const activeTab = useMemo(() => space?.tabs.find((t) => t.active) ?? null, [space])
@@ -79,6 +84,27 @@ export function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => setEditingName(false), [space?.id])
+
+  // Ctrl+L / Ctrl+T ask the main process to put the caret in the omnibox
+  useEffect(
+    () =>
+      iris.onFocusOmnibox(() => {
+        omniFocused.current = true
+        omniRef.current?.focus()
+        omniRef.current?.select()
+      }),
+    [],
+  )
+
+  // Ctrl+H opens history for the active Space
+  useEffect(
+    () =>
+      iris.onOpenHistory(() => {
+        const id = spacesRef.current.find((s) => s.active)?.id
+        if (id) void iris.getHistory(id).then((h) => setHistory([...h].reverse()))
+      }),
+    [],
+  )
 
   // custom tooltip: single fixed element positioned from the hovered [data-tip], escapes all clipping
   useEffect(() => {
@@ -194,6 +220,35 @@ export function App(): React.JSX.Element {
           {tip.text}
           <span className="tip-arrow" />
         </div>
+      )}
+
+      {history && (
+        <Modal
+          title="History"
+          subtitle={space ? `${space.label} · ${history.length} pages` : undefined}
+          onClose={() => setHistory(null)}
+        >
+          {history.length === 0 ? (
+            <div className="mempty">Nothing visited in this Space yet.</div>
+          ) : (
+            history.map((h) => (
+              <div
+                className="mrow"
+                key={`${h.at}-${h.url}`}
+                onClick={() => {
+                  if (space) void iris.navigate(space.id, h.url)
+                  setHistory(null)
+                }}
+              >
+                <div className="mrow-main">
+                  <div className="mrow-title">{h.title || prettyUrl(h.url)}</div>
+                  <div className="mrow-sub">{prettyUrl(h.url)}</div>
+                </div>
+                <span className="mrow-meta">{relTime(h.at)}</span>
+              </div>
+            ))
+          )}
+        </Modal>
       )}
 
       <header className="topbar">
@@ -374,6 +429,24 @@ export function App(): React.JSX.Element {
             New Tab
           </button>
         </div>
+
+        {space?.status && (
+          <div className="statusline">
+            <span className="statusdot" />
+            <span className="statustext">{space.status}</span>
+          </div>
+        )}
+
+        {space && space.downloads.length > 0 && (
+          <div className="downloads">
+            <div className="dlhead">Downloads</div>
+            {space.downloads.map((d) => (
+              <div className="dlitem" key={d.path} data-tip={d.path}>
+                {d.filename}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="sidebar-spacer" />
 

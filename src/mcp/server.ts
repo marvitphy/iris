@@ -245,6 +245,84 @@ server.registerTool(
 )
 
 server.registerTool(
+  'press_key',
+  {
+    title: 'Press a key',
+    description:
+      'Press a keyboard key on the page: "Escape" (dismiss a modal), "Enter", "Tab", "ArrowDown", "PageDown", or a chord like "Control+A". Use when there is no element to click, or to drive a custom dropdown.',
+    inputSchema: { key: z.string(), spaceId: z.string().optional() },
+  },
+  async ({ key, spaceId }) => text(await control(`/spaces/${await resolveSpace(spaceId)}/key`, 'POST', { key })),
+)
+
+server.registerTool(
+  'select_option',
+  {
+    title: 'Select a dropdown option',
+    description:
+      'Choose an option in a native <select> by its visible label (or value). For custom JS dropdowns, click to open it and click the option instead.',
+    inputSchema: { ref: z.string(), value: z.string(), spaceId: z.string().optional() },
+  },
+  async ({ ref, value, spaceId }) =>
+    text(await control(`/spaces/${await resolveSpace(spaceId)}/select`, 'POST', { ref, value })),
+)
+
+server.registerTool(
+  'upload_file',
+  {
+    title: 'Upload a file',
+    description:
+      'Attach local file(s) to a file input on the page (résumé, image, document). Give absolute paths. This ALWAYS asks the user to approve first (it reads their disk and sends the data out), unless the Space has Autonomy on; if the reply says decision "rejected", do not retry.',
+    inputSchema: { ref: z.string(), paths: z.array(z.string()), spaceId: z.string().optional() },
+  },
+  async ({ ref, paths, spaceId }) =>
+    text(await control(`/spaces/${await resolveSpace(spaceId)}/upload`, 'POST', { ref, paths })),
+)
+
+server.registerTool(
+  'scrape',
+  {
+    title: 'Read the page as clean markdown',
+    description:
+      'Extract the main content of the page as markdown (headings, lists, links preserved; nav/ads/footers dropped). PREFER THIS over read_text for reading articles, docs, and results — it costs far fewer tokens and keeps the structure.',
+    inputSchema: { spaceId: z.string().optional() },
+  },
+  async ({ spaceId }) => text(await control(`/spaces/${await resolveSpace(spaceId)}/scrape`)),
+)
+
+server.registerTool(
+  'set_status',
+  {
+    title: 'Tell the user what you are doing',
+    description:
+      'Set a short status line shown in the Iris sidebar for this Space (e.g. "Comparing ticketing platforms", "Reading the OpenAI post"). Update it when you move to a new phase; pass an empty string to clear. This is how the human follows a long task.',
+    inputSchema: { text: z.string(), spaceId: z.string().optional() },
+  },
+  async ({ text: value, spaceId }) =>
+    text(await control(`/spaces/${await resolveSpace(spaceId)}/status`, 'POST', { text: value })),
+)
+
+server.registerTool(
+  'history',
+  {
+    title: 'Browsing history for a Space',
+    description: 'The pages visited in this Space, oldest to newest (url, title, time). Useful to retrace what was already looked at.',
+    inputSchema: { spaceId: z.string().optional() },
+  },
+  async ({ spaceId }) => text(await control(`/spaces/${await resolveSpace(spaceId)}/history`)),
+)
+
+server.registerTool(
+  'list_downloads',
+  {
+    title: 'Files downloaded in this Space',
+    description: 'Files the browser downloaded in this Space, with their paths on disk (they land in Documents/Iris).',
+    inputSchema: { spaceId: z.string().optional() },
+  },
+  async ({ spaceId }) => text(await control(`/spaces/${await resolveSpace(spaceId)}/downloads`)),
+)
+
+server.registerTool(
   'read_viewport',
   {
     title: 'Read what the user is seeing',

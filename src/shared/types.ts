@@ -19,6 +19,12 @@ export interface ActivityEntry {
   at: number
 }
 
+export interface DownloadEntry {
+  filename: string
+  path: string
+  at: number
+}
+
 export interface SpaceInfo {
   id: string
   label: string
@@ -26,10 +32,12 @@ export interface SpaceInfo {
   active: boolean
   busy: boolean
   autonomous: boolean
+  status: string | null
   tabs: TabInfo[]
   handoff: HandoffState | null
   approval: ApprovalRequest | null
   activity: ActivityEntry[]
+  downloads: DownloadEntry[]
 }
 
 export interface ApprovalRequest {
@@ -74,7 +82,16 @@ export interface IrisApi {
   handoffResume(spaceId: string): Promise<void>
   approvalDecide(spaceId: string, approved: boolean): Promise<void>
   setAutonomous(spaceId: string, on: boolean): Promise<void>
+  getHistory(spaceId: string): Promise<HistoryEntry[]>
   onSpacesChanged(cb: (spaces: SpaceInfo[]) => void): () => void
+  onFocusOmnibox(cb: () => void): () => void
+  onOpenHistory(cb: () => void): () => void
+}
+
+export interface HistoryEntry {
+  url: string
+  title: string
+  at: number
 }
 
 export const IPC = {
@@ -97,4 +114,7 @@ export const IPC = {
   approvalDecide: 'approval:decide',
   setAutonomous: 'space:autonomous',
   spacesChanged: 'spaces:changed',
+  focusOmnibox: 'ui:focus-omnibox',
+  openHistory: 'ui:open-history',
+  historyGet: 'space:history',
 } as const

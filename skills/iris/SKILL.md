@@ -64,10 +64,28 @@ created may have been deleted; the active Space may have changed).
 ## Working with the logged-in web
 
 - `navigate` takes a URL or a search query (a plain query does a web search).
-- `read_text` for readable text; `evaluate` to run JS and extract structured data in ONE call
-  (e.g. `[...document.querySelectorAll('h3')].map(e=>e.innerText)`) — far cheaper than many clicks.
+- **`scrape` is your default reader**: the page as clean markdown, headings and links kept, nav and
+  ads dropped. Use it for articles, docs, and results. `read_text` is the raw fallback; `evaluate`
+  runs JS for structured extraction in ONE call (e.g. `[...document.querySelectorAll('h3')].map(e=>e.innerText)`).
 - `screenshot` when you need to SEE the page (canvas, maps, charts, visual verification).
-- `go_back` / `go_forward` for history.
+- `go_back` / `go_forward` to move in history; `history` lists what this Space has visited.
+
+## Filling things in
+
+- `click` and `type` cover most of it. Beyond that:
+  - **`press_key`** for keys with no element: `Escape` to dismiss a modal, `Tab`, `ArrowDown` to walk
+    a custom dropdown, `Control+A`.
+  - **`select_option`** for native `<select>` (by visible label). For a JS dropdown, click it open and
+    click the option.
+  - **`upload_file`** to attach a local file (absolute path). It always asks the user first; if the
+    decision is `rejected`, do not retry.
+- Files the page downloads land in Documents/Iris — `list_downloads` gives you their paths.
+
+## Keep the user informed
+
+Call **`set_status`** with a short line whenever you start a new phase of a longer task
+("Comparing ticketing platforms", "Reading the OpenAI post"). It shows in the Iris sidebar and is how
+the human follows along. Clear it with an empty string when you finish.
 
 ## Two rules that build trust
 

@@ -3,18 +3,36 @@ import { app } from 'electron'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import type { SpaceManager } from './SpaceManager'
-import type { Engine } from './engine/Engine'
+import type { Engine, PageTarget } from './engine/Engine'
+
+type Body = Record<string, unknown>
+
+/** Everything a per-Space route handler needs. */
+interface Ctx {
+  id: string
+  body: Body
+  query: URLSearchParams
+  target: PageTarget
+}
+
+type Handler = (ctx: Ctx) => Promise<unknown>
 
 /**
- * Local HTTP control plane the MCP server (a separate process) talks to. Bridges agent
- * tool calls to the SpaceManager (owns Spaces + their UI) and the Engine (drives pages).
- * Bound to 127.0.0.1 only; the port is published via the runtime handshake file.
+ * Local HTTP control plane the MCP server (a separate process) talks to. Bridges agent tool calls to
+ * the SpaceManager (Spaces, tabs, UI state) and the Engine (page actions). Bound to 127.0.0.1 only;
+ * the port is published via the runtime handshake file.
+ *
+ * Routes are a dispatch table (`METHOD action`) rather than an if-chain, so adding a tool is one entry.
  */
 export class ControlServer {
+  private spaceRoutes: Record<string, Handler>
+
   constructor(
     private manager: SpaceManager,
     private engine: Engine,
-  ) {}
+  ) {
+    this.spaceRoutes = this.buildSpaceRoutes()
+  }
 
   listen(): Promise<number> {
     const server = createServer((req, res) => void this.handle(req, res))
@@ -27,225 +45,253 @@ export class ControlServer {
     })
   }
 
-  /** Mark a Space as actively worked by the agent — every control-API call IS an agent action,
-   *  on whatever Space (human or agent). Drives the shell glow + best-effort in-page nebula. */
-  private async activity(id: string): Promise<void> {
-    this.manager.markBusy(id)
-    await this.engine.pulse(this.manager.urlOf(id)).catch(() => {})
-  }
-
-  /** After an action, check whether a human wall appeared and update the Space handoff state. */
-  private async checkHandoff(id: string): Promise<string | null> {
-    const reason = await this.engine.detectHandoff(this.manager.urlOf(id)).catch(() => null)
-    if (reason) this.manager.setHandoff(id, reason)
-    else this.manager.clearHandoff(id)
-    return reason
-  }
-
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
       const parts = url.pathname.split('/').filter(Boolean)
+      const method = req.method ?? 'GET'
       const body = await readBody(req)
 
-      // /health
-      if (req.method === 'GET' && parts[0] === 'health') {
-        return json(res, 200, { ok: true, spaces: this.manager.list() })
-      }
+      const root = await this.handleRoot(parts, method, body)
+      if (root) return json(res, root.status, root.payload)
 
-      // /files — save arbitrary agent-composed content (CSV, MD, notes) to disk
-      if (req.method === 'POST' && parts[0] === 'files') {
-        const path = writeExport(String(body.filename ?? 'iris-output.txt'), String(body.content ?? ''))
-        return json(res, 200, { path })
-      }
+      if (parts[0] !== 'spaces') return json(res, 404, { error: 'not found' })
 
-      // /context — live ground truth: which Space + tab the user is on right now, and all open Spaces
-      if (req.method === 'GET' && parts[0] === 'context') {
-        const spaces = this.manager.list()
-        const active = spaces.find((s) => s.active) ?? null
-        const tab = active?.tabs.find((t) => t.active) ?? null
-        return json(res, 200, {
-          activeSpaceId: active?.id ?? null,
-          activeSpaceLabel: active?.label ?? null,
-          activeSpaceKind: active?.kind ?? null,
-          autonomous: active?.autonomous ?? false,
-          activeTabId: tab?.id ?? null,
-          url: tab?.url ?? null,
-          title: tab?.title ?? null,
-          openSpaces: spaces.map((s) => ({
-            id: s.id,
-            label: s.label,
-            kind: s.kind,
-            active: s.active,
-            autonomous: s.autonomous,
-            tabCount: s.tabs.length,
-          })),
-        })
-      }
-
-      // /spaces
-      if (parts[0] === 'spaces') {
-        if (req.method === 'GET' && parts.length === 1) {
-          return json(res, 200, { spaces: this.manager.list() })
-        }
-        if (req.method === 'POST' && parts.length === 1) {
-          const kind = body.kind === 'human' ? 'human' : 'agent'
-          const id = this.manager.createSpace(kind, body.label as string | undefined)
-          return json(res, 200, { id })
-        }
-
-        const id = parts[1]
-        if (id && !this.manager.has(id)) return json(res, 404, { error: `space not found: ${id}` })
-        const action = parts[2]
-
-        if (action === 'tabs') {
-          const tabId = parts[3]
-          const sub = parts[4]
-          if (req.method === 'GET' && !tabId) {
-            const info = this.manager.list().find((s) => s.id === id)
-            return json(res, 200, { tabs: info?.tabs ?? [] })
-          }
-          if (req.method === 'POST' && !tabId) {
-            const newTabId = this.manager.addTab(id, body.url ? String(body.url) : undefined)
-            await this.activity(id)
-            this.manager.logActivity(id, 'tab', body.url ? domainOf(this.manager.urlOf(id)) : 'new tab')
-            return json(res, 200, { tabId: newTabId, url: this.manager.urlOf(id) })
-          }
-          if (req.method === 'POST' && tabId && sub === 'activate') {
-            this.manager.activateTab(id, tabId)
-            return json(res, 200, { ok: true })
-          }
-          if (req.method === 'DELETE' && tabId) {
-            this.manager.closeTab(id, tabId)
-            return json(res, 200, { ok: true })
-          }
-          return json(res, 404, { error: 'tab route not found' })
-        }
-
-        if (req.method === 'POST' && action === 'activate') {
-          this.manager.activate(id)
-          return json(res, 200, { ok: true })
-        }
-        if (req.method === 'POST' && action === 'rename') {
-          this.manager.renameSpace(id, String(body.label ?? ''))
-          return json(res, 200, { ok: true })
-        }
-        if (req.method === 'DELETE' && parts.length === 2) {
-          this.manager.closeSpace(id)
-          return json(res, 200, { ok: true })
-        }
-        if (req.method === 'POST' && action === 'navigate') {
-          const raw = String(body.url ?? '').trim()
-          const isUrl = /^[a-z]+:\/\//i.test(raw) || (/^[^\s]+\.[^\s]+$/.test(raw) && !raw.includes(' '))
-          await this.manager.navigate(id, raw)
-          await this.activity(id)
-          this.manager.logActivity(id, isUrl ? 'visit' : 'search', isUrl ? domainOf(this.manager.urlOf(id)) : raw)
-          const handoff = await this.checkHandoff(id)
-          return json(res, 200, { ok: true, url: this.manager.urlOf(id), handoff })
-        }
-        if (req.method === 'GET' && action === 'snapshot') {
-          await this.activity(id)
-          const tree = await this.engine.snapshot(this.manager.urlOf(id))
-          const handoff = await this.checkHandoff(id)
-          return json(res, 200, { url: this.manager.urlOf(id), tree, handoff })
-        }
-        if (req.method === 'POST' && action === 'click') {
-          await this.activity(id)
-          const result = await this.engine.click(this.manager.urlOf(id), String(body.ref))
-          const handoff = await this.checkHandoff(id)
-          return json(res, 200, { ...result, handoff })
-        }
-        if (req.method === 'POST' && action === 'type') {
-          await this.activity(id)
-          const result = await this.engine.type(
-            this.manager.urlOf(id),
-            String(body.ref),
-            String(body.text ?? ''),
-            Boolean(body.submit),
-          )
-          const handoff = await this.checkHandoff(id)
-          return json(res, 200, { ...result, handoff })
-        }
-        if (req.method === 'POST' && action === 'approval') {
-          const decision = await this.manager.requestApproval(id, String(body.action ?? 'action'))
-          return json(res, 200, { decision })
-        }
-        if (req.method === 'GET' && action === 'screenshot') {
-          const full = url.searchParams.get('full') === '1'
-          await this.activity(id)
-          const image = await this.engine.screenshot(this.manager.urlOf(id), full)
-          return json(res, 200, { image, mime: 'image/png' })
-        }
-        if (req.method === 'POST' && action === 'export') {
-          const format = String(body.format ?? 'pdf')
-          const base = String(body.filename ?? `${domainOf(this.manager.urlOf(id))}-${format}`)
-          if (format === 'pdf') {
-            const buf = await this.manager.printToPdf(id)
-            const path = writeExportBuffer(base.endsWith('.pdf') ? base : `${base}.pdf`, buf)
-            return json(res, 200, { path })
-          }
-          const txt = await this.engine.readText(this.manager.urlOf(id))
-          const ext = format === 'md' ? '.md' : '.txt'
-          const path = writeExport(base.endsWith(ext) ? base : `${base}${ext}`, txt)
-          return json(res, 200, { path })
-        }
-        if (req.method === 'POST' && action === 'evaluate') {
-          await this.activity(id)
-          const value = await this.engine.evaluate(this.manager.urlOf(id), String(body.expression ?? ''))
-          return json(res, 200, { value })
-        }
-        if (req.method === 'POST' && (action === 'back' || action === 'forward')) {
-          if (action === 'back') this.manager.back(id)
-          else this.manager.forward(id)
-          await this.activity(id)
-          return json(res, 200, { ok: true, url: this.manager.urlOf(id) })
-        }
-        if (req.method === 'POST' && action === 'reveal') {
-          await this.activity(id)
-          const result = await this.engine.reveal(this.manager.urlOf(id), String(body.ref))
-          return json(res, 200, result)
-        }
-        if (req.method === 'POST' && action === 'scroll') {
-          await this.activity(id)
-          const dy = Number(body.dy ?? 800)
-          const result = await this.engine.scroll(this.manager.urlOf(id), dy)
-          const handoff = await this.checkHandoff(id)
-          return json(res, 200, { ...result, handoff })
-        }
-        if (req.method === 'GET' && action === 'handoff') {
-          return json(res, 200, { handoff: this.manager.handoffOf(id) })
-        }
-        if (req.method === 'POST' && action === 'resume') {
-          this.manager.clearHandoff(id)
-          return json(res, 200, { ok: true })
-        }
-        if (req.method === 'GET' && action === 'text') {
-          const ref = url.searchParams.get('ref') ?? undefined
-          const text = await this.engine.readText(this.manager.urlOf(id), ref)
-          if (!ref) this.manager.logActivity(id, 'read', domainOf(this.manager.urlOf(id)))
-          return json(res, 200, { text })
-        }
-        if (req.method === 'GET' && action === 'viewport') {
-          const text = await this.engine.readViewport(this.manager.urlOf(id))
-          return json(res, 200, { text })
-        }
-      }
-
-      json(res, 404, { error: 'not found' })
+      const result = await this.handleSpaces(parts, method, body, url.searchParams)
+      return json(res, result.status, result.payload)
     } catch (e) {
       json(res, 500, { error: e instanceof Error ? e.message : String(e) })
     }
   }
+
+  /** Routes that aren't scoped to a Space: health, file writes, and live context. */
+  private async handleRoot(parts: string[], method: string, body: Body): Promise<Reply | null> {
+    if (method === 'GET' && parts[0] === 'health') {
+      return ok({ ok: true, spaces: this.manager.list() })
+    }
+    if (method === 'POST' && parts[0] === 'files') {
+      const path = writeExport(String(body.filename ?? 'iris-output.txt'), String(body.content ?? ''))
+      return ok({ path })
+    }
+    if (method === 'GET' && parts[0] === 'context') return ok(this.liveContext())
+    return null
+  }
+
+  /** What the user is looking at right now, plus every open Space. */
+  private liveContext(): unknown {
+    const spaces = this.manager.list()
+    const active = spaces.find((s) => s.active)
+    const tab = active?.tabs.find((t) => t.active)
+    return {
+      activeSpaceId: active?.id ?? null,
+      activeSpaceLabel: active?.label ?? null,
+      activeSpaceKind: active?.kind ?? null,
+      autonomous: active?.autonomous ?? false,
+      status: active?.status ?? null,
+      activeTabId: tab?.id ?? null,
+      url: tab?.url ?? null,
+      title: tab?.title ?? null,
+      openSpaces: spaces.map((s) => ({
+        id: s.id,
+        label: s.label,
+        kind: s.kind,
+        active: s.active,
+        autonomous: s.autonomous,
+        tabCount: s.tabs.length,
+      })),
+    }
+  }
+
+  private async handleSpaces(parts: string[], method: string, body: Body, query: URLSearchParams): Promise<Reply> {
+    if (parts.length === 1) {
+      if (method === 'GET') return ok({ spaces: this.manager.list() })
+      if (method === 'POST') {
+        const kind = body.kind === 'human' ? 'human' : 'agent'
+        return ok({ id: this.manager.createSpace(kind, body.label as string | undefined) })
+      }
+      return notFound()
+    }
+
+    const id = parts[1]
+    if (!this.manager.has(id)) return { status: 404, payload: { error: `space not found: ${id}` } }
+    const action = parts[2] ?? ''
+
+    if (action === 'tabs') return this.handleTabs(id, parts, method, body)
+    if (method === 'DELETE' && parts.length === 2) {
+      this.manager.closeSpace(id)
+      return ok({ ok: true })
+    }
+
+    const handler = this.spaceRoutes[`${method} ${action}`]
+    if (!handler) return notFound()
+    const target: PageTarget = { token: this.manager.activeTabToken(id), url: this.manager.urlOf(id) }
+    return ok(await handler({ id, body, query, target }))
+  }
+
+  private async handleTabs(id: string, parts: string[], method: string, body: Body): Promise<Reply> {
+    const tabId = parts[3]
+    const sub = parts[4]
+    if (method === 'GET' && !tabId) {
+      return ok({ tabs: this.manager.list().find((s) => s.id === id)?.tabs ?? [] })
+    }
+    if (method === 'POST' && !tabId) {
+      const newTabId = this.manager.addTab(id, body.url ? String(body.url) : undefined)
+      await this.activity(id)
+      return ok({ tabId: newTabId, url: this.manager.urlOf(id) })
+    }
+    if (method === 'POST' && tabId && sub === 'activate') {
+      this.manager.activateTab(id, tabId)
+      return ok({ ok: true })
+    }
+    if (method === 'DELETE' && tabId) {
+      this.manager.closeTab(id, tabId)
+      return ok({ ok: true })
+    }
+    return notFound()
+  }
+
+  private buildSpaceRoutes(): Record<string, Handler> {
+    const withResult = async (ctx: Ctx, run: () => Promise<unknown>): Promise<unknown> => {
+      await this.activity(ctx.id)
+      const result = await run()
+      const handoff = await this.checkHandoff(ctx.id)
+      return typeof result === 'object' && result ? { ...result, handoff } : { result, handoff }
+    }
+
+    return {
+      'POST activate': async ({ id }) => {
+        this.manager.activate(id)
+        return { ok: true }
+      },
+      'POST rename': async ({ id, body }) => {
+        this.manager.renameSpace(id, String(body.label ?? ''))
+        return { ok: true }
+      },
+      'POST status': async ({ id, body }) => {
+        this.manager.setStatus(id, String(body.text ?? ''))
+        return { ok: true }
+      },
+      'GET history': async ({ id }) => ({ history: this.manager.historyOf(id).slice(-60) }),
+      'GET downloads': async ({ id }) => ({ downloads: this.manager.downloadsOf(id) }),
+      'GET handoff': async ({ id }) => ({ handoff: this.manager.handoffOf(id) }),
+      'POST resume': async ({ id }) => {
+        this.manager.clearHandoff(id)
+        return { ok: true }
+      },
+      'POST approval': async ({ id, body }) => ({
+        decision: await this.manager.requestApproval(id, String(body.action ?? 'action')),
+      }),
+
+      'POST navigate': async (ctx) =>
+        withResult(ctx, async () => {
+          const raw = String(ctx.body.url ?? '').trim()
+          const isUrl = /^[a-z]+:\/\//i.test(raw) || (/^[^\s]+\.[^\s]+$/.test(raw) && !raw.includes(' '))
+          await this.manager.navigate(ctx.id, raw)
+          this.manager.logActivity(ctx.id, isUrl ? 'visit' : 'search', isUrl ? domainOf(this.manager.urlOf(ctx.id)) : raw)
+          return { ok: true, url: this.manager.urlOf(ctx.id) }
+        }),
+      'POST back': async (ctx) =>
+        withResult(ctx, async () => {
+          this.manager.back(ctx.id)
+          return { ok: true, url: this.manager.urlOf(ctx.id) }
+        }),
+      'POST forward': async (ctx) =>
+        withResult(ctx, async () => {
+          this.manager.forward(ctx.id)
+          return { ok: true, url: this.manager.urlOf(ctx.id) }
+        }),
+
+      'GET snapshot': async (ctx) =>
+        withResult(ctx, async () => ({ url: ctx.target.url, tree: await this.engine.snapshot(ctx.target) })),
+      'POST click': async (ctx) => withResult(ctx, () => this.engine.click(ctx.target, String(ctx.body.ref))),
+      'POST type': async (ctx) =>
+        withResult(ctx, () =>
+          this.engine.type(ctx.target, String(ctx.body.ref), String(ctx.body.text ?? ''), Boolean(ctx.body.submit)),
+        ),
+      'POST key': async (ctx) => withResult(ctx, () => this.engine.pressKey(ctx.target, String(ctx.body.key))),
+      'POST select': async (ctx) =>
+        withResult(ctx, () => this.engine.selectOption(ctx.target, String(ctx.body.ref), String(ctx.body.value))),
+      'POST upload': async (ctx) =>
+        withResult(ctx, async () => {
+          const paths = Array.isArray(ctx.body.paths) ? ctx.body.paths.map(String) : []
+          // Uploading reaches into the user's filesystem and sends data out: always gated.
+          const names = paths.map((p) => basename(p)).join(', ')
+          const decision = await this.manager.requestApproval(ctx.id, `Upload ${names}`)
+          if (decision !== 'approved') return { ok: false, decision }
+          return this.engine.uploadFile(ctx.target, String(ctx.body.ref), paths)
+        }),
+      'POST scroll': async (ctx) => withResult(ctx, () => this.engine.scroll(ctx.target, Number(ctx.body.dy ?? 800))),
+      'POST reveal': async (ctx) => withResult(ctx, () => this.engine.reveal(ctx.target, String(ctx.body.ref))),
+      'POST evaluate': async (ctx) =>
+        withResult(ctx, async () => ({ value: await this.engine.evaluate(ctx.target, String(ctx.body.expression ?? '')) })),
+
+      'GET text': async ({ id, query, target }) => {
+        const ref = query.get('ref') ?? undefined
+        const text = await this.engine.readText(target, ref)
+        if (!ref) this.manager.logActivity(id, 'read', domainOf(target.url))
+        return { text }
+      },
+      'GET viewport': async ({ target }) => ({ text: await this.engine.readViewport(target) }),
+      'GET scrape': async ({ id, target }) => {
+        this.manager.logActivity(id, 'read', domainOf(target.url))
+        return { markdown: await this.engine.scrape(target) }
+      },
+      'GET screenshot': async ({ id, query, target }) => {
+        await this.activity(id)
+        return { image: await this.engine.screenshot(target, query.get('full') === '1'), mime: 'image/png' }
+      },
+      'POST export': async ({ id, body, target }) => {
+        const format = String(body.format ?? 'pdf')
+        const base = String(body.filename ?? `${domainOf(target.url)}-${format}`)
+        if (format === 'pdf') {
+          const buf = await this.manager.printToPdf(id)
+          return { path: writeExportBuffer(base.endsWith('.pdf') ? base : `${base}.pdf`, buf) }
+        }
+        const content = format === 'md' ? await this.engine.scrape(target) : await this.engine.readText(target)
+        const ext = format === 'md' ? '.md' : '.txt'
+        return { path: writeExport(base.endsWith(ext) ? base : `${base}${ext}`, content) }
+      },
+    }
+  }
+
+  /** Mark a Space as actively worked by the agent: drives the shell glow and the in-page nebula. */
+  private async activity(id: string): Promise<void> {
+    this.manager.markBusy(id)
+    const target: PageTarget = { token: this.manager.activeTabToken(id), url: this.manager.urlOf(id) }
+    await this.engine.pulse(target).catch(() => {})
+  }
+
+  /** After an action, check whether a human wall appeared and update the Space handoff state. */
+  private async checkHandoff(id: string): Promise<string | null> {
+    const target: PageTarget = { token: this.manager.activeTabToken(id), url: this.manager.urlOf(id) }
+    const reason = await this.engine.detectHandoff(target).catch(() => null)
+    if (reason) this.manager.setHandoff(id, reason)
+    else this.manager.clearHandoff(id)
+    return reason
+  }
 }
 
-function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+interface Reply {
+  status: number
+  payload: unknown
+}
+
+function ok(payload: unknown): Reply {
+  return { status: 200, payload }
+}
+
+function notFound(): Reply {
+  return { status: 404, payload: { error: 'not found' } }
+}
+
+function readBody(req: IncomingMessage): Promise<Body> {
   return new Promise((resolve) => {
     let data = ''
     req.on('data', (c) => (data += c))
     req.on('end', () => {
       if (!data) return resolve({})
       try {
-        resolve(JSON.parse(data) as Record<string, unknown>)
+        resolve(JSON.parse(data) as Body)
       } catch {
         resolve({})
       }
@@ -275,7 +321,9 @@ function exportDir(): string {
 }
 
 function safeName(name: string): string {
-  const clean = basename(name).replace(/[^\w.\- ]+/g, '_').trim()
+  const clean = basename(name)
+    .replace(/[^\w.\- ]+/g, '_')
+    .trim()
   return clean.length ? clean : 'iris-output.txt'
 }
 

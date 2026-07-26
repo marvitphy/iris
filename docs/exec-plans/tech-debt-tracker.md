@@ -9,9 +9,10 @@ Keep it lean. A resolved item is deleted, not struck through.
 
 | Item | Where | Type | Noted |
 |---|---|---|---|
-| `handle` complexity 107, 182 lines (limit 10/120) — split router by resource | `src/main/ControlServer.ts:45` | complexity | v0.1.2 |
-| `App` complexity 24, 321 lines — extract TopBar/Sidebar/SpaceHeader/Rail/Tooltip | `src/renderer/src/App.tsx:57` | complexity | v0.1.2 |
-| `restore` complexity 16 — extract per-Space rebuild + human-invariant helpers | `src/main/SpaceManager.ts:368` | complexity | v0.1.2 |
+| `App` complexity 31, 385 lines — extract TopBar/Sidebar/SpaceHeader/Rail/Tooltip components | `src/renderer/src/App.tsx` | complexity | v0.1.3 |
+| `restore` complexity 16 — extract per-Space rebuild + human-invariant helpers | `src/main/SpaceManager.ts` | complexity | v0.1.2 |
+| `liveContext` 18, `handleTabs` 13, `handleSpaces` 11 — mostly `??` chains; flatten when touched | `src/main/ControlServer.ts` | complexity | v0.1.3 |
+| `Engine.find` 13 — split the token scan from the url fallback | `src/main/engine/Engine.ts` | complexity | v0.1.3 |
 | No test runner (Vitest fits the Vite stack); add before shipping test-worthy behavior | repo-wide | missing-test | v0.1.2 |
 | Invariants in ARCHITECTURE.md not enforced by structural tests (depcruise/semgrep) | ARCHITECTURE.md | boundary | v0.1.2 |
 

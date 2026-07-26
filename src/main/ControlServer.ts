@@ -193,6 +193,7 @@ export class ControlServer {
       'GET history': async ({ id }) => ({ history: this.manager.historyOf(id).slice(-60) }),
       'GET downloads': async ({ id }) => ({ downloads: this.manager.downloadsOf(id) }),
       'GET logs': async ({ id }) => ({ logs: this.manager.logsOf(id).slice(-40) }),
+      'POST reset-site': async ({ id }) => ({ reset: await this.manager.resetSiteData(id) }),
       'GET handoff': async ({ id }) => ({ handoff: this.manager.handoffOf(id) }),
       'POST resume': async ({ id }) => {
         this.manager.clearHandoff(id)

@@ -327,6 +327,27 @@ export class SpaceManager extends EventEmitter {
   }
 
   /** Downloads for a Space land in Documents/Iris and are recorded so the agent can report the path. */
+  /**
+   * Clear a site's service worker and caches in this Space, keeping cookies so the login survives.
+   * A stale or broken service worker intercepts every request the page makes and fails it (the page
+   * still renders from disk cache, which makes it look like the site itself is down); this is the
+   * standard fix and it should not cost the user their session.
+   */
+  async resetSiteData(spaceId: string): Promise<string> {
+    const wc = this.activeWebContents(spaceId)
+    if (!wc) throw new Error(`space not found: ${spaceId}`)
+    const current = wc.getURL()
+    const origin = new URL(current).origin
+    await wc.session.clearStorageData({
+      origin,
+      storages: ['serviceworkers', 'cachestorage', 'indexdb', 'filesystem', 'shadercache'],
+    })
+    await wc.session.clearCache()
+    wc.reloadIgnoringCache()
+    this.log(spaceId, 'network', 'info', `reset site data for ${origin} (cookies kept)`)
+    return origin
+  }
+
   /** Chromium's network service can crash and restart; pages alive at that moment lose DNS and start
    *  failing every request. Reloading them is what actually brings them back. */
   reloadAllTabs(): void {
@@ -401,6 +422,7 @@ export class SpaceManager extends EventEmitter {
       { label: 'Back', enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
       { label: 'Forward', enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
       { label: 'Reload', click: () => wc.reload() },
+      { label: 'Reset site data (keep login)', click: () => void this.resetSiteData(spaceId).catch(() => {}) },
       { type: 'separator' },
       { label: 'Inspect element', click: () => wc.inspectElement(params.x, params.y) },
     )

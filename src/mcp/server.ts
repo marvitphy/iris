@@ -357,6 +357,17 @@ server.registerTool(
 )
 
 server.registerTool(
+  'reset_site_data',
+  {
+    title: 'Reset a stuck site',
+    description:
+      "Clear the current site's service worker and caches in this Space, keeping cookies so the login survives, then hard-reload. Use when page_logs shows the page failing every request (a stale service worker makes a site look broken even though it renders from cache). Try it once before telling the user the site is down.",
+    inputSchema: { spaceId: z.string().optional() },
+  },
+  async ({ spaceId }) => text(await control(`/spaces/${await resolveSpace(spaceId)}/reset-site`, 'POST')),
+)
+
+server.registerTool(
   'list_downloads',
   {
     title: 'Files downloaded in this Space',

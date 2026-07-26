@@ -222,12 +222,12 @@ export class ControlServer {
         }),
       'POST back': async (ctx) =>
         withResult(ctx, async () => {
-          this.manager.back(ctx.id)
+          await this.manager.back(ctx.id)
           return { ok: true, url: this.manager.urlOf(ctx.id) }
         }),
       'POST forward': async (ctx) =>
         withResult(ctx, async () => {
-          this.manager.forward(ctx.id)
+          await this.manager.forward(ctx.id)
           return { ok: true, url: this.manager.urlOf(ctx.id) }
         }),
 

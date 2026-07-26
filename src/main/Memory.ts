@@ -86,12 +86,28 @@ export class Memory {
     return this.entries.filter((e) => e.scope === 'space' && e.key === spaceId)
   }
 
+  /**
+   * Word-based search: a natural question ("hacker news rate limit 429") never appears verbatim in a
+   * saved note, so matching the whole phrase as one substring silently returns nothing. Score by how
+   * many of the query's words appear, and return the best matches.
+   */
   search(query: string, scope?: MemoryScope): MemoryEntry[] {
-    const q = query.trim().toLowerCase()
-    return this.entries
-      .filter((e) => (scope ? e.scope === scope : true))
-      .filter((e) => !q || e.text.toLowerCase().includes(q) || e.key.includes(q))
-      .slice(-60)
+    const words = query
+      .toLowerCase()
+      .split(/[^a-z0-9._-]+/)
+      .filter((w) => w.length > 2)
+    const pool = this.entries.filter((e) => (scope ? e.scope === scope : true))
+    if (!words.length) return pool.slice(-60)
+
+    return pool
+      .map((entry) => {
+        const haystack = `${entry.text} ${entry.key}`.toLowerCase()
+        return { entry, score: words.filter((w) => haystack.includes(w)).length }
+      })
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score || b.entry.at - a.entry.at)
+      .slice(0, 30)
+      .map((r) => r.entry)
   }
 
   all(): MemoryEntry[] {

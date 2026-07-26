@@ -140,9 +140,9 @@ export class SpaceManager extends EventEmitter {
     })
     wc.on('context-menu', (_e, params) => this.showContextMenu(spaceId, wc, params))
     wc.on('console-message', (e) => {
-      if (e.level === 'error' || e.level === 'warning') {
-        this.log(spaceId, 'console', e.level, `${e.message} (${e.sourceId}:${e.lineNumber})`)
-      }
+      if (e.level !== 'error' && e.level !== 'warning') return
+      if (isOwnNoise(e.message)) return // Electron's own CSP/devtools chatter, not the page's problem
+      this.log(spaceId, 'console', e.level, `${e.message} (${e.sourceId}:${e.lineNumber})`)
     })
     wc.on('did-fail-load', (_e, code, desc, failedUrl, isMainFrame) => {
       if (code === -3) return // aborted by a redirect or a newer navigation: not a real failure
@@ -272,14 +272,48 @@ export class SpaceManager extends EventEmitter {
     return wc.loadURL(normalizeUrl(input)).catch(() => {})
   }
 
-  back(spaceId: string): void {
-    const nav = this.activeTab(spaceId)?.view.webContents.navigationHistory
-    if (nav?.canGoBack()) nav.goBack()
+  /** Resolve once the new document has actually committed, so callers can report the real URL
+   *  instead of the one they were on when they asked. */
+  private settled(wc: WebContents, timeoutMs = 6000): Promise<void> {
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timer)
+        wc.off('did-navigate', done)
+        wc.off('did-navigate-in-page', done)
+        wc.off('did-fail-load', done)
+        resolve()
+      }
+      const timer = setTimeout(done, timeoutMs)
+      wc.once('did-navigate', done)
+      wc.once('did-navigate-in-page', done)
+      wc.once('did-fail-load', done)
+    })
   }
 
-  forward(spaceId: string): void {
-    const nav = this.activeTab(spaceId)?.view.webContents.navigationHistory
-    if (nav?.canGoForward()) nav.goForward()
+  /** Wait until a freshly created tab has loaded, so callers can report its real URL. */
+  async waitForTab(spaceId: string, tabId: string): Promise<void> {
+    const tab = this.spaces.get(spaceId)?.tabs.find((t) => t.id === tabId)
+    if (!tab || tab.view.webContents.isDestroyed()) return
+    if (!tab.view.webContents.isLoading()) return
+    await this.settled(tab.view.webContents)
+  }
+
+  async back(spaceId: string): Promise<void> {
+    const wc = this.activeWebContents(spaceId)
+    const nav = wc?.navigationHistory
+    if (!wc || !nav?.canGoBack()) return
+    const settled = this.settled(wc)
+    nav.goBack()
+    await settled
+  }
+
+  async forward(spaceId: string): Promise<void> {
+    const wc = this.activeWebContents(spaceId)
+    const nav = wc?.navigationHistory
+    if (!wc || !nav?.canGoForward()) return
+    const settled = this.settled(wc)
+    nav.goForward()
+    await settled
   }
 
   reload(spaceId: string): void {
@@ -348,6 +382,7 @@ export class SpaceManager extends EventEmitter {
   private recordHistory(spaceId: string, wc: WebContents): void {
     const url = wc.getURL()
     if (!url || url === 'about:blank') return
+    if (url === HOME_URL || url.startsWith(`${HOME_URL}/?`)) return // the blank-tab landing page is not a visit
     const list = this.history.get(spaceId) ?? []
     const last = list[list.length - 1]
     if (last && last.url === url) {
@@ -728,6 +763,11 @@ const SHORTCUTS: Record<string, (m: SpaceManager, spaceId: string) => void> = {
   'alt+arrowright': (m, id) => m.forward(id),
   'mod+h': (m) => m.emit('open-history'),
   'mod+m': (m) => m.emit('open-memory'),
+}
+
+/** Warnings Electron emits about the app itself, which tell you nothing about the page. */
+function isOwnNoise(message: string): boolean {
+  return /Content-Security-Policy|Electron Security Warning|Autofill\.enable|devtools:\/\//i.test(message)
 }
 
 function withRadius(view: WebContentsView): void {

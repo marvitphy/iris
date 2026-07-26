@@ -93,6 +93,7 @@ export interface IrisApi {
   checkExit(spaceId: string): Promise<{ ip: string; country?: string; city?: string } | { error: string }>
   getIntegration(): Promise<IntegrationStatus>
   installIntegration(): Promise<{ ok: boolean; error?: string }>
+  registerWithClaude(): Promise<{ ok: boolean; output: string }>
   onSpacesChanged(cb: (spaces: SpaceInfo[]) => void): () => void
   onFocusOmnibox(cb: () => void): () => void
   onOpenHistory(cb: () => void): () => void
@@ -107,6 +108,7 @@ export interface IntegrationStatus {
   skillPath: string
   skillInstalled: boolean
   skillOutdated: boolean
+  claudeRegistered: boolean
   agentConnected: boolean
   lastAgentCallAt: number
   command: string
@@ -184,6 +186,7 @@ export const IPC = {
   openSettings: 'ui:open-settings',
   integrationGet: 'integration:get',
   integrationInstall: 'integration:install',
+  integrationRegister: 'integration:register',
   settingsProxy: 'settings:proxy',
   checkExit: 'settings:check-exit',
 } as const

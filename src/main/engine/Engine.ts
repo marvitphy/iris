@@ -4,6 +4,15 @@ import { READ_MARKER } from '../marker'
 const ACTION_TIMEOUT = 8000
 /** minimum gap between agent interactions, so we move at a human cadence */
 const MIN_ACTION_GAP_MS = 350
+/** link-heavy pages produce enormous trees; past this the agent pays for context it will not read */
+const SNAPSHOT_MAX_CHARS = 24000
+
+function truncateSnapshot(tree: string, maxChars: number): string {
+  if (tree.length <= maxChars) return tree
+  return `${tree.slice(0, maxChars)}
+
+[snapshot truncated at ${maxChars} characters. Scroll, or snapshot a smaller region, to see the rest.]`
+}
 
 export interface ActionResult {
   ok: boolean
@@ -43,17 +52,25 @@ export class Engine {
     this.browser = await chromium.connectOverCDP(endpoint, { noDefaults: true })
   }
 
-  async snapshot(target: PageTarget): Promise<string> {
+  async snapshot(target: PageTarget, maxChars = SNAPSHOT_MAX_CHARS): Promise<string> {
     const page = await this.requirePage(target)
     await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {})
-    return page.locator('body').ariaSnapshot({ mode: 'ai' })
+    const tree = await page.locator('body').ariaSnapshot({ mode: 'ai' })
+    return truncateSnapshot(tree, maxChars)
   }
 
   async click(target: PageTarget, ref: string): Promise<ActionResult> {
     const page = await this.requirePage(target)
     await this.pace()
     const loc = page.locator(`aria-ref=${ref}`)
-    await loc.click({ timeout: ACTION_TIMEOUT })
+    try {
+      await loc.click({ timeout: ACTION_TIMEOUT })
+    } catch (e) {
+      // Playwright waits for the element to stop moving; pages that animate forever (or re-render on
+      // a timer) never satisfy that, so retry once ignoring actionability rather than failing.
+      if (!/Timeout|not stable|intercepts pointer/i.test(String(e))) throw e
+      await loc.click({ timeout: ACTION_TIMEOUT, force: true })
+    }
     return this.settle(page)
   }
 
@@ -226,7 +243,8 @@ export class Engine {
 
   private async settle(page: Page): Promise<ActionResult> {
     await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {})
-    return { ok: true, url: page.url(), snapshot: await page.locator('body').ariaSnapshot({ mode: 'ai' }) }
+    const tree = await page.locator('body').ariaSnapshot({ mode: 'ai' })
+    return { ok: true, url: page.url(), snapshot: truncateSnapshot(tree, SNAPSHOT_MAX_CHARS) }
   }
 
   private async tokenOf(page: Page): Promise<string> {

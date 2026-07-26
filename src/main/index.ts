@@ -164,6 +164,7 @@ function wireIpc(): void {
   ipcMain.handle(IPC.settingsGet, () => settings.all())
   ipcMain.handle(IPC.integrationGet, () => integration.status(control?.lastAgentCallAt ?? 0))
   ipcMain.handle(IPC.integrationInstall, () => integration.install())
+  ipcMain.handle(IPC.integrationRegister, () => integration.registerWithClaude())
   ipcMain.handle(IPC.settingsDns, (_e, mode: 'system' | 'google' | 'cloudflare') => settings.setDns(mode))
   ipcMain.handle(IPC.settingsProxy, async (_e, spaceId: string, proxy) => {
     settings.setProxy(spaceId, proxy)

@@ -253,21 +253,22 @@ export function App(): React.JSX.Element {
             <div className="mempty">Nothing remembered yet. The agent saves what it learns as it works.</div>
           ) : (
             memories.map((m) => (
-              <div className="mrow" key={m.id}>
-                <span className={`memscope s-${m.scope}`}>{m.scope === 'site' ? m.key : m.scope}</span>
-                <div className="mrow-main">
-                  <div className="memtext">{m.text}</div>
+              <div className="mrow memrow" key={m.id}>
+                <div className="memhead">
+                  <span className={`memscope s-${m.scope}`}>{m.scope === 'site' ? m.key : m.scope}</span>
+                  <span className="memtime">{relTime(m.at)}</span>
+                  <span
+                    className="memforget"
+                    data-tip="Forget this"
+                    onClick={() => {
+                      void iris.forgetMemory(m.id)
+                      setMemories((prev) => (prev ? prev.filter((x) => x.id !== m.id) : prev))
+                    }}
+                  >
+                    <Close size={14} />
+                  </span>
                 </div>
-                <span
-                  className="memforget"
-                  data-tip="Forget this"
-                  onClick={() => {
-                    void iris.forgetMemory(m.id)
-                    setMemories((prev) => (prev ? prev.filter((x) => x.id !== m.id) : prev))
-                  }}
-                >
-                  <Close size={14} />
-                </span>
+                <div className="memtext">{m.text}</div>
               </div>
             ))
           )}

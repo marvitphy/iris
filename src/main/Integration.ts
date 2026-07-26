@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { execFile } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IntegrationStatus } from '../shared/types'
@@ -29,7 +30,46 @@ export class Integration {
     }
   }
 
-  status(lastAgentCallAt: number): IntegrationStatus {
+  /** Skills go to Claude Code's own folder plus the agent-agnostic one other tools read. */
+  private skillTargets(): string[] {
+    const home = app.getPath('home')
+    return [
+      join(home, '.claude', 'skills', 'iris', 'SKILL.md'),
+      join(home, '.agents', 'skills', 'iris', 'SKILL.md'),
+    ]
+  }
+
+  /** Is the Iris MCP server registered with Claude Code for this user (not just this project)? */
+  registeredWithClaude(): Promise<boolean> {
+    return new Promise((resolve) => {
+      execFile('claude', ['mcp', 'list'], { shell: true, timeout: 8000 }, (err, stdout) => {
+        if (err) return resolve(false)
+        resolve(/^\s*iris\b/m.test(stdout) || stdout.includes('iris:'))
+      })
+    })
+  }
+
+  /**
+   * Register the MCP server with Claude Code at USER scope, so every project sees Iris. Without the
+   * scope flag `claude mcp add` only registers for the current directory, which is why "it worked
+   * yesterday and not in this folder" happens.
+   */
+  registerWithClaude(): Promise<{ ok: boolean; output: string }> {
+    const mcp = this.targets().mcp
+    return new Promise((resolve) => {
+      execFile(
+        'claude',
+        ['mcp', 'add', '--scope', 'user', 'iris', '--', 'node', mcp],
+        { shell: true, timeout: 15000 },
+        (err, stdout, stderr) => {
+          const output = `${stdout}${stderr}`.trim()
+          resolve({ ok: !err, output: output || (err ? String(err) : 'registered') })
+        },
+      )
+    })
+  }
+
+  async status(lastAgentCallAt: number): Promise<IntegrationStatus> {
     const src = this.sources()
     const dst = this.targets()
     return {
@@ -40,9 +80,10 @@ export class Integration {
       skillInstalled: existsSync(dst.skill),
       skillOutdated: outdated(src.skill, dst.skill),
       // any agent tool call reaches the control server, so a recent one means something is driving us
+      claudeRegistered: await this.registeredWithClaude(),
       agentConnected: lastAgentCallAt > 0 && Date.now() - lastAgentCallAt < 5 * 60 * 1000,
       lastAgentCallAt,
-      command: `claude mcp add iris -- node ${dst.mcp}`,
+      command: `claude mcp add --scope user iris -- node ${dst.mcp}`,
     }
   }
 
@@ -51,10 +92,9 @@ export class Integration {
     try {
       const src = this.sources()
       const dst = this.targets()
-      for (const [from, to] of [
-        [src.mcp, dst.mcp],
-        [src.skill, dst.skill],
-      ]) {
+      const pairs: [string, string][] = [[src.mcp, dst.mcp]]
+      for (const skillTarget of this.skillTargets()) pairs.push([src.skill, skillTarget])
+      for (const [from, to] of pairs) {
         if (!existsSync(from)) continue
         mkdirSync(join(to, '..'), { recursive: true })
         copyFileSync(from, to)

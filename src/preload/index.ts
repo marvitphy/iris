@@ -43,6 +43,7 @@ const api: IrisApi = {
   getSettings: () => ipcRenderer.invoke(IPC.settingsGet),
   getIntegration: () => ipcRenderer.invoke(IPC.integrationGet),
   installIntegration: () => ipcRenderer.invoke(IPC.integrationInstall),
+  registerWithClaude: () => ipcRenderer.invoke(IPC.integrationRegister),
   setDns: (mode) => ipcRenderer.invoke(IPC.settingsDns, mode),
   setSpaceLocation: (spaceId, location) => ipcRenderer.invoke(IPC.settingsLocation, spaceId, location),
   setSpaceProxy: (spaceId, proxy) => ipcRenderer.invoke(IPC.settingsProxy, spaceId, proxy),

@@ -45,6 +45,7 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
   const [password, setPassword] = useState('')
   const [exit, setExit] = useState('')
   const [testing, setTesting] = useState(false)
+  const [registerOutput, setRegisterOutput] = useState('')
 
   const refresh = useCallback(() => {
     void iris.getIntegration().then(setIntegration)
@@ -80,6 +81,14 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
     setProxy({ scheme: 'http', host: '', port: 0 })
     setPassword('')
     setExit('Using the direct connection.')
+  }
+
+  const register = async (): Promise<void> => {
+    setBusy(true)
+    const r = await iris.registerWithClaude()
+    setRegisterOutput(r.ok ? 'Registered for every project. Restart your agent to pick it up.' : r.output)
+    refresh()
+    setBusy(false)
   }
 
   const install = async (): Promise<void> => {
@@ -145,6 +154,15 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
             }
           />
           <Check
+            ok={!!integration?.claudeRegistered}
+            label="Registered with Claude Code"
+            detail={
+              integration?.claudeRegistered
+                ? 'Available in every project (user scope)'
+                : 'Not registered, or the claude command is not on PATH'
+            }
+          />
+          <Check
             ok={!!integration?.agentConnected}
             label="Agent activity"
             detail={
@@ -155,11 +173,19 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
           />
         </div>
 
-        {needsRepair && (
-          <button className="setbtn" onClick={install} disabled={busy}>
-            {busy ? 'Installing…' : 'Install / repair'}
-          </button>
-        )}
+        <div className="proxyactions">
+          {needsRepair && (
+            <button className="setbtn" onClick={install} disabled={busy}>
+              {busy ? 'Installing…' : 'Install / repair'}
+            </button>
+          )}
+          {!integration?.claudeRegistered && (
+            <button className="setbtn" onClick={register} disabled={busy}>
+              {busy ? 'Registering…' : 'Register with Claude Code'}
+            </button>
+          )}
+        </div>
+        {registerOutput && <div className="exitinfo">{registerOutput}</div>}
 
         <div className="setcmd">
           <code>{integration?.command ?? ''}</code>

@@ -18,10 +18,24 @@ interface SelectProps {
  * which looks out of place in a dark, custom-chrome window; this one is drawn by us, keyboard
  * accessible, and closes on outside click or Escape.
  */
+const MENU_MAX_HEIGHT = 208
+
 export function Select({ value, options, onChange, disabled }: SelectProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [rect, setRect] = useState<{ left: number; width: number; top: number; up: boolean } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const current = options.find((o) => o.value === value) ?? options[0]
+
+  /** The menu is positioned fixed: inside a scrolling dialog an absolute menu gets clipped, and it
+   *  flips above the trigger when there isn't room below. */
+  const place = (): void => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom - 12
+    const up = below < Math.min(MENU_MAX_HEIGHT, options.length * 44) && r.top > below
+    setRect({ left: r.left, width: r.width, top: up ? r.top - 6 : r.bottom + 6, up })
+  }
 
   useEffect(() => {
     if (!open) return
@@ -34,11 +48,16 @@ export function Select({ value, options, onChange, disabled }: SelectProps): Rea
         setOpen(false)
       }
     }
+    const reposition = (): void => place()
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
     return () => {
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
     }
   }, [open])
 
@@ -46,7 +65,11 @@ export function Select({ value, options, onChange, disabled }: SelectProps): Rea
     <div className="sel" ref={ref}>
       <button
         className={`sel-trigger ${open ? 'open' : ''}`}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={() => {
+          if (disabled) return
+          if (!open) place()
+          setOpen((o) => !o)
+        }}
         disabled={disabled}
         type="button"
       >
@@ -59,8 +82,17 @@ export function Select({ value, options, onChange, disabled }: SelectProps): Rea
         </svg>
       </button>
 
-      {open && (
-        <div className="sel-menu" role="listbox">
+      {open && rect && (
+        <div
+          className="sel-menu"
+          role="listbox"
+          style={{
+            left: rect.left,
+            width: rect.width,
+            top: rect.up ? undefined : rect.top,
+            bottom: rect.up ? window.innerHeight - rect.top : undefined,
+          }}
+        >
           {options.map((o) => (
             <button
               key={o.value}

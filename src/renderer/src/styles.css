@@ -78,7 +78,7 @@ html, body, #root {
   transition: background 0.12s, color 0.12s;
 }
 .modal-x:hover { background: var(--hover); color: var(--fg); }
-.modal-body { flex: 1; overflow-y: auto; padding: 8px; }
+.modal-body { flex: 1; overflow-y: auto; overflow-x: visible; padding: 8px; }
 .modal-foot {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 16px; border-top: 1px solid var(--line);
@@ -248,17 +248,17 @@ html, body, #root {
 .sel-trigger.open .sel-chevron { transform: rotate(180deg); }
 
 .sel-menu {
-  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 60;
+  position: fixed; z-index: 9500;
   padding: 5px; border-radius: 10px;
   background: #17151d; border: 1px solid rgba(255, 255, 255, 0.11);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
-  max-height: 260px; overflow-y: auto;
+  max-height: 208px; overflow-y: auto;
   animation: selIn 0.13s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 @keyframes selIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .sel-option {
   width: 100%; display: flex; align-items: center; gap: 10px;
-  padding: 8px 9px; border: none; border-radius: 7px; background: transparent;
+  padding: 6px 9px; border: none; border-radius: 7px; background: transparent;
   color: var(--muted); font-size: 12.5px; font-family: inherit; text-align: left; cursor: pointer;
   transition: background 0.1s, color 0.1s;
 }
@@ -266,7 +266,7 @@ html, body, #root {
 .sel-option.selected { color: var(--fg); }
 .sel-optmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .sel-optlabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sel-optnote { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-optnote { font-size: 10.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sel-tick { flex: 0 0 auto; width: 14px; height: 14px; color: var(--agent); }
 
 /* settings rows, checks and actions */
@@ -286,8 +286,8 @@ html, body, #root {
 .checkdot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
 .checkdot.on { background: #58d19b; box-shadow: 0 0 8px rgba(88, 209, 155, 0.5); }
 .checkdot.off { background: #ffb050; }
-.checkmain { flex: 1; min-width: 0; }
-.checklabel { font-size: 12.5px; color: var(--fg); }
+.checkmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.checklabel { font-size: 12.5px; color: var(--fg); font-weight: 550; }
 .checkdetail { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .setcmd {

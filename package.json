@@ -1,6 +1,6 @@
 {
   "name": "iris",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "A minimalist browser your AI agent drives, and you can too.",

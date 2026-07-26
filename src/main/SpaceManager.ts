@@ -69,6 +69,7 @@ export class SpaceManager extends EventEmitter {
   private history = new Map<string, { url: string; title: string; at: number }[]>()
   private logs = new Map<string, { kind: 'console' | 'network'; level: string; text: string; at: number }[]>()
   private wiredPartitions = new Set<string>()
+  private acceptLanguage = new Map<string, string>()
   private activity = new Map<string, { kind: ActivityKind; text: string; at: number }[]>()
   private approvals = new Map<string, Pending>()
 
@@ -157,7 +158,10 @@ export class SpaceManager extends EventEmitter {
     wc.on('did-finish-load', () => {
       tab.retried = false
     })
-    wc.on('did-navigate', () => this.recordHistory(spaceId, wc))
+    wc.on('did-navigate', () => {
+      this.recordHistory(spaceId, wc)
+      this.emit('navigated', spaceId)
+    })
     wc.on('page-title-updated', () => this.recordHistory(spaceId, wc))
     // links that ask for a new window/tab open as a tab in this Space instead
     wc.setWindowOpenHandler(({ url: target }) => {
@@ -291,6 +295,12 @@ export class SpaceManager extends EventEmitter {
     return this.spaces.get(id)?.kind ?? null
   }
 
+  /** Send this Space's requests with a given Accept-Language, part of presenting a coherent locale. */
+  setAcceptLanguage(spaceId: string, locale: string | null): void {
+    if (locale) this.acceptLanguage.set(spaceId, `${locale},${locale.split('-')[0]};q=0.9,en;q=0.8`)
+    else this.acceptLanguage.delete(spaceId)
+  }
+
   /** The token stamped into the active tab's page, used to target THIS tab (not just its URL). */
   activeTabToken(spaceId: string): string {
     return this.activeTab(spaceId)?.id ?? ''
@@ -375,6 +385,11 @@ export class SpaceManager extends EventEmitter {
     if (this.wiredPartitions.has(partition)) return
     this.wiredPartitions.add(partition)
     // failed HTTP responses are the other half of "why is this page broken"
+    sess.webRequest.onBeforeSendHeaders((details, callback) => {
+      const locale = this.acceptLanguage.get(spaceId)
+      if (locale) details.requestHeaders['Accept-Language'] = locale
+      callback({ requestHeaders: details.requestHeaders })
+    })
     sess.webRequest.onCompleted((details) => {
       if (details.statusCode >= 400 && details.resourceType !== 'image') {
         this.log(spaceId, 'network', String(details.statusCode), `${details.statusCode} ${details.url}`)

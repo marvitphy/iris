@@ -61,6 +61,14 @@ function createWindow(): void {
     win.focus()
     manager.activate(id)
   })
+  // re-apply this Space's location emulation after every navigation, since a new document drops it
+  manager.on('navigated', (spaceId: string) => {
+    const loc = settings?.locationOf(spaceId)
+    if (!loc) return
+    void engine
+      .applyLocation({ token: manager.activeTabToken(spaceId), url: manager.urlOf(spaceId) }, loc)
+      .catch(() => {})
+  })
   manager.on('focus-omnibox', () => {
     if (!win.webContents.isDestroyed()) {
       win.webContents.focus()
@@ -92,6 +100,10 @@ function createWindow(): void {
     win.focus()
     manager.activate(id)
   })
+
+  for (const [spaceId, loc] of Object.entries(settings.all().locations)) {
+    manager.setAcceptLanguage(spaceId, loc.locale)
+  }
 
   const saved = loadState()
   if (!saved || !manager.restore(saved)) manager.createSpace('human', 'You')
@@ -152,6 +164,7 @@ function wireIpc(): void {
   ipcMain.handle(IPC.settingsDns, (_e, mode: 'system' | 'google' | 'cloudflare') => settings.setDns(mode))
   ipcMain.handle(IPC.settingsLocation, async (_e, spaceId: string, location) => {
     settings.setLocation(spaceId, location)
+    manager.setAcceptLanguage(spaceId, location?.locale ?? null)
     await engine
       .applyLocation({ token: manager.activeTabToken(spaceId), url: manager.urlOf(spaceId) }, location)
       .catch(() => {})

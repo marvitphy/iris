@@ -157,8 +157,9 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
       <section className="setgroup">
         <div className="setlabel">Location for this Space</div>
         <div className="sethint">
-          What sites in {space?.label ?? 'this Space'} see as your location, timezone and language. Each
-          Space can sit somewhere different.
+          Sets the geolocation, timezone and language that sites in {space?.label ?? 'this Space'} see.
+          Sites that decide by IP address (Google’s country footer, for one) will still read your real
+          connection: only a proxy or VPN changes that.
         </div>
         <Select
           value={space && settings ? (settings.locations[space.id]?.label ?? '') : ''}

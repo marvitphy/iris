@@ -15,6 +15,12 @@ const CDP_PORT = Number(process.env.IRIS_CDP_PORT ?? 9222)
 app.commandLine.appendSwitch('remote-debugging-port', String(CDP_PORT))
 app.commandLine.appendSwitch('remote-allow-origins', '*') // Chromium M111+ needs this for external CDP ws
 
+// Electron appends "Iris/x.y.z Electron/x.y.z" to the UA. Iris *is* Chromium, and sites that gate
+// features on the UA break or degrade when they see an unknown client, so present as plain Chromium.
+app.userAgentFallback = app.userAgentFallback
+  .replace(/\sIris\/[\d.]+/, '')
+  .replace(/\sElectron\/[\d.]+/, '')
+
 let manager: SpaceManager
 let engine: Engine
 let memory: Memory
@@ -177,6 +183,14 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// When Chromium's network service dies, live pages keep failing every request (DNS included).
+// Reloading them after it restarts is the difference between "the site is broken" and self-healing.
+app.on('child-process-gone', (_event, details) => {
+  if (details.type !== 'Utility' || details.serviceName !== 'network.mojom.NetworkService') return
+  console.error('[iris] network service gone:', details.reason, '- reloading tabs')
+  setTimeout(() => manager?.reloadAllTabs(), 1500)
 })
 
 app.on('window-all-closed', () => {

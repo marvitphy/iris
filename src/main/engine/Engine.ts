@@ -1,8 +1,8 @@
 import { chromium, type Browser, type Page } from 'playwright-core'
-import { AURA_SHOW, AURA_HIDE, auraRipple } from './aura'
 
-const AURA_IDLE_MS = 4000
 const ACTION_TIMEOUT = 8000
+/** minimum gap between agent interactions, so we move at a human cadence */
+const MIN_ACTION_GAP_MS = 350
 
 export interface ActionResult {
   ok: boolean
@@ -27,7 +27,7 @@ export interface PageTarget {
  */
 export class Engine {
   private browser: Browser | null = null
-  private auraTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private lastActionAt = 0
   private pagesByToken = new Map<string, Page>()
   /** A tab keeps its token across navigations, so this is stable and saves re-evaluating pages.
    *  Fewer in-page evaluates also means a smaller automation footprint on strict sites. */
@@ -42,22 +42,6 @@ export class Engine {
     this.browser = await chromium.connectOverCDP(endpoint, { noDefaults: true })
   }
 
-  /** Show the agent-activity aura on a Space page and refresh its idle auto-hide timer. */
-  async pulse(target: PageTarget): Promise<void> {
-    const page = await this.find(target)
-    if (!page) return
-    await page.evaluate(AURA_SHOW).catch(() => {})
-    const prev = this.auraTimers.get(target.token)
-    if (prev) clearTimeout(prev)
-    this.auraTimers.set(
-      target.token,
-      setTimeout(() => {
-        this.auraTimers.delete(target.token)
-        void page.evaluate(AURA_HIDE).catch(() => {})
-      }, AURA_IDLE_MS),
-    )
-  }
-
   async snapshot(target: PageTarget): Promise<string> {
     const page = await this.requirePage(target)
     await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {})
@@ -66,11 +50,21 @@ export class Engine {
 
   async click(target: PageTarget, ref: string): Promise<ActionResult> {
     const page = await this.requirePage(target)
+    await this.pace()
     const loc = page.locator(`aria-ref=${ref}`)
-    const box = await loc.boundingBox().catch(() => null)
-    if (box) await page.evaluate(auraRipple(box.x + box.width / 2, box.y + box.height / 2)).catch(() => {})
     await loc.click({ timeout: ACTION_TIMEOUT })
     return this.settle(page)
+  }
+
+  /**
+   * Keep a human cadence between interactions. Firing clicks milliseconds apart is both the clearest
+   * signal that nobody is really there and a good way to race a page that hasn't finished reacting.
+   */
+  private async pace(): Promise<void> {
+    const since = Date.now() - this.lastActionAt
+    const wait = MIN_ACTION_GAP_MS - since
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+    this.lastActionAt = Date.now()
   }
 
   /**
@@ -79,6 +73,7 @@ export class Engine {
    */
   async type(target: PageTarget, ref: string, text: string, submit = false): Promise<ActionResult> {
     const page = await this.requirePage(target)
+    await this.pace()
     const loc = page.locator(`aria-ref=${ref}`)
     await loc.fill(text, { timeout: ACTION_TIMEOUT }).catch(() => {})
     const landed = await loc
@@ -94,6 +89,7 @@ export class Engine {
 
   async pressKey(target: PageTarget, key: string): Promise<ActionResult> {
     const page = await this.requirePage(target)
+    await this.pace()
     await page.keyboard.press(key)
     return this.settle(page)
   }

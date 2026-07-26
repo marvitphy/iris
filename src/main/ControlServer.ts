@@ -277,11 +277,9 @@ export class ControlServer {
     }
   }
 
-  /** Mark a Space as actively worked by the agent: drives the shell glow and the in-page nebula. */
+  /** Mark a Space as actively worked by the agent; the shell draws the halo from this. */
   private async activity(id: string): Promise<void> {
     this.manager.markBusy(id)
-    const target: PageTarget = { token: this.manager.activeTabToken(id), url: this.manager.urlOf(id) }
-    await this.engine.pulse(target).catch(() => {})
   }
 
   /** After an action, check whether a human wall appeared and update the Space handoff state. */

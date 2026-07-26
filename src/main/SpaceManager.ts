@@ -28,11 +28,15 @@ const RING = 5 // width of the glow ring hugging the site
 const RADIUS = 6 // site card corner radius
 const HOME_URL = 'https://www.google.com'
 const BUSY_IDLE_MS = 45000
+/** ERR_NAME_NOT_RESOLVED, ERR_INTERNET_DISCONNECTED, ERR_NETWORK_CHANGED, ERR_CONNECTION_RESET */
+const TRANSIENT_NET_ERRORS = new Set([-105, -106, -21, -101])
 
 interface Tab {
   id: string
   view: WebContentsView
   favicon: string | null
+  /** guards the one automatic retry after a transient network/DNS failure */
+  retried: boolean
 }
 
 interface Space {
@@ -108,7 +112,7 @@ export class SpaceManager extends EventEmitter {
     this.wireDownloads(spaceId, partition, spaceSession)
     const view = new WebContentsView({ webPreferences: { session: spaceSession } })
     withRadius(view)
-    const tab: Tab = { id: tabId, view, favicon: null }
+    const tab: Tab = { id: tabId, view, favicon: null, retried: false }
     const wc = view.webContents
     const emit = () => this.emitChanged()
     wc.on('page-title-updated', emit)
@@ -137,9 +141,20 @@ export class SpaceManager extends EventEmitter {
         this.log(spaceId, 'console', e.level, `${e.message} (${e.sourceId}:${e.lineNumber})`)
       }
     })
-    wc.on('did-fail-load', (_e, code, desc, failedUrl) => {
+    wc.on('did-fail-load', (_e, code, desc, failedUrl, isMainFrame) => {
       if (code === -3) return // aborted by a redirect or a newer navigation: not a real failure
       this.log(spaceId, 'network', 'error', `${desc} (${code}) ${failedUrl}`)
+      // DNS and connectivity failures are usually transient here (Chromium's network service can be
+      // restarted underneath a live page); retry the document once before giving up on it.
+      if (isMainFrame && TRANSIENT_NET_ERRORS.has(code) && !tab.retried) {
+        tab.retried = true
+        setTimeout(() => {
+          if (!wc.isDestroyed()) wc.reload()
+        }, 1200)
+      }
+    })
+    wc.on('did-finish-load', () => {
+      tab.retried = false
     })
     wc.on('did-navigate', () => this.recordHistory(spaceId, wc))
     wc.on('page-title-updated', () => this.recordHistory(spaceId, wc))
@@ -311,6 +326,17 @@ export class SpaceManager extends EventEmitter {
   }
 
   /** Downloads for a Space land in Documents/Iris and are recorded so the agent can report the path. */
+  /** Chromium's network service can crash and restart; pages alive at that moment lose DNS and start
+   *  failing every request. Reloading them is what actually brings them back. */
+  reloadAllTabs(): void {
+    for (const space of this.spaces.values()) {
+      for (const tab of space.tabs) {
+        const wc = tab.view.webContents
+        if (!wc.isDestroyed() && wc.getURL() && wc.getURL() !== 'about:blank') wc.reload()
+      }
+    }
+  }
+
   /** Console errors and failed requests for a Space, so a broken page can actually be diagnosed. */
   logsOf(id: string): { kind: string; level: string; text: string; at: number }[] {
     return this.logs.get(id) ?? []

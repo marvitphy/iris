@@ -81,6 +81,12 @@ created may have been deleted; the active Space may have changed).
     decision is `rejected`, do not retry.
 - Files the page downloads land in Documents/Iris — `list_downloads` gives you their paths.
 
+## When a page misbehaves
+
+Don't guess and don't retry blindly. **`page_logs`** returns this Space's recent console errors and
+failed/4xx/5xx requests: read it first when a page shows an error, renders empty, or an action seems
+to do nothing. Then decide: reload, wait, take a different route, or tell the user what is broken.
+
 ## Remember what you learn
 
 Iris keeps memory across sessions, and it is the difference between a tool that starts from zero every

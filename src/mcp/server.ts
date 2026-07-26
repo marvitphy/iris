@@ -346,6 +346,17 @@ server.registerTool(
 )
 
 server.registerTool(
+  'page_logs',
+  {
+    title: 'Console errors and failed requests',
+    description:
+      'Recent console errors/warnings and failed or 4xx/5xx requests for this Space. Use it when a page misbehaves, renders an error, or an action silently does nothing — it tells you what actually broke instead of guessing.',
+    inputSchema: { spaceId: z.string().optional() },
+  },
+  async ({ spaceId }) => text(await control(`/spaces/${await resolveSpace(spaceId)}/logs`)),
+)
+
+server.registerTool(
   'list_downloads',
   {
     title: 'Files downloaded in this Space',

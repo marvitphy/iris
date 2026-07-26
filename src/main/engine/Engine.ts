@@ -29,6 +29,9 @@ export class Engine {
   private browser: Browser | null = null
   private auraTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private pagesByToken = new Map<string, Page>()
+  /** A tab keeps its token across navigations, so this is stable and saves re-evaluating pages.
+   *  Fewer in-page evaluates also means a smaller automation footprint on strict sites. */
+  private tokenCache = new WeakMap<Page, string>()
 
   constructor(private cdpPort: number) {}
 
@@ -199,7 +202,11 @@ export class Engine {
   }
 
   private async tokenOf(page: Page): Promise<string> {
-    return page.evaluate<string>('window.__irisTab || ""').catch(() => '')
+    const cached = this.tokenCache.get(page)
+    if (cached) return cached
+    const token = await page.evaluate<string>('window.__irisTab || ""').catch(() => '')
+    if (token) this.tokenCache.set(page, token)
+    return token
   }
 
   /** Resolve the page for a target: cached token match, then a full scan, then url fallback. */

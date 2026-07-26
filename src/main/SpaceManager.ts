@@ -62,6 +62,7 @@ export class SpaceManager extends EventEmitter {
   private statuses = new Map<string, string>()
   private downloads = new Map<string, DownloadEntry[]>()
   private history = new Map<string, { url: string; title: string; at: number }[]>()
+  private logs = new Map<string, { kind: 'console' | 'network'; level: string; text: string; at: number }[]>()
   private wiredPartitions = new Set<string>()
   private activity = new Map<string, { kind: ActivityKind; text: string; at: number }[]>()
   private approvals = new Map<string, Pending>()
@@ -131,6 +132,15 @@ export class SpaceManager extends EventEmitter {
       if (this.handleShortcut(spaceId, input)) event.preventDefault()
     })
     wc.on('context-menu', (_e, params) => this.showContextMenu(spaceId, wc, params))
+    wc.on('console-message', (e) => {
+      if (e.level === 'error' || e.level === 'warning') {
+        this.log(spaceId, 'console', e.level, `${e.message} (${e.sourceId}:${e.lineNumber})`)
+      }
+    })
+    wc.on('did-fail-load', (_e, code, desc, failedUrl) => {
+      if (code === -3) return // aborted by a redirect or a newer navigation: not a real failure
+      this.log(spaceId, 'network', 'error', `${desc} (${code}) ${failedUrl}`)
+    })
     wc.on('did-navigate', () => this.recordHistory(spaceId, wc))
     wc.on('page-title-updated', () => this.recordHistory(spaceId, wc))
     // links that ask for a new window/tab open as a tab in this Space instead
@@ -219,6 +229,7 @@ export class SpaceManager extends EventEmitter {
     this.statuses.delete(id)
     this.downloads.delete(id)
     this.history.delete(id)
+    this.logs.delete(id)
     clearTimeout(this.busy.get(id))
     this.busy.delete(id)
     if (this.activeId === id) {
@@ -300,9 +311,27 @@ export class SpaceManager extends EventEmitter {
   }
 
   /** Downloads for a Space land in Documents/Iris and are recorded so the agent can report the path. */
+  /** Console errors and failed requests for a Space, so a broken page can actually be diagnosed. */
+  logsOf(id: string): { kind: string; level: string; text: string; at: number }[] {
+    return this.logs.get(id) ?? []
+  }
+
+  private log(spaceId: string, kind: 'console' | 'network', level: string, text: string): void {
+    const list = this.logs.get(spaceId) ?? []
+    list.push({ kind, level, text: text.slice(0, 400), at: Date.now() })
+    if (list.length > 100) list.shift()
+    this.logs.set(spaceId, list)
+  }
+
   private wireDownloads(spaceId: string, partition: string, sess: Session): void {
     if (this.wiredPartitions.has(partition)) return
     this.wiredPartitions.add(partition)
+    // failed HTTP responses are the other half of "why is this page broken"
+    sess.webRequest.onCompleted((details) => {
+      if (details.statusCode >= 400 && details.resourceType !== 'image') {
+        this.log(spaceId, 'network', String(details.statusCode), `${details.statusCode} ${details.url}`)
+      }
+    })
     sess.on('will-download', (_event, item) => {
       const dir = join(app.getPath('documents'), 'Iris')
       mkdirSync(dir, { recursive: true })

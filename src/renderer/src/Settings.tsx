@@ -212,7 +212,11 @@ export function SettingsModal({ space, onClose }: { space: SpaceInfo | null; onC
         </div>
         <div className="sethint">
           Send this Space’s traffic through a proxy you provide. This is what changes the IP a site
-          sees, so it is the piece that makes a location actually hold up.
+          sees, so it is the piece that makes a location actually hold up. You get the host, port and
+          credentials from wherever the proxy comes from: a VPN that offers SOCKS5 (Mullvad, Proton,
+          Windscribe), a proxy provider, or your own server. With a VPS you already have,{' '}
+          <code className="inlinecode">ssh -D 1080 user@your-server</code> gives you one for free at{' '}
+          <code className="inlinecode">socks5 · 127.0.0.1 · 1080</code>.
         </div>
 
         <div className="proxyrow">

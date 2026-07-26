@@ -269,6 +269,12 @@ html, body, #root {
 .sel-optnote { font-size: 10.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sel-tick { flex: 0 0 auto; width: 14px; height: 14px; color: var(--agent); }
 
+.inlinecode {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px;
+  background: rgba(255, 255, 255, 0.07); border-radius: 4px; padding: 1px 5px; color: #d9d5e0;
+  white-space: nowrap;
+}
+
 /* proxy fields */
 .proxyrow { display: flex; gap: 8px; margin-bottom: 8px; }
 .proxyrow > .sel { flex: 0 0 120px; }

@@ -89,11 +89,25 @@ export interface IrisApi {
   getSettings(): Promise<IrisSettings>
   setDns(mode: IrisSettings['dns']): Promise<void>
   setSpaceLocation(spaceId: string, location: SpaceLocation | null): Promise<void>
+  getIntegration(): Promise<IntegrationStatus>
+  installIntegration(): Promise<{ ok: boolean; error?: string }>
   onSpacesChanged(cb: (spaces: SpaceInfo[]) => void): () => void
   onFocusOmnibox(cb: () => void): () => void
   onOpenHistory(cb: () => void): () => void
   onOpenMemory(cb: () => void): () => void
   onOpenSettings(cb: () => void): () => void
+}
+
+export interface IntegrationStatus {
+  mcpPath: string
+  mcpInstalled: boolean
+  mcpOutdated: boolean
+  skillPath: string
+  skillInstalled: boolean
+  skillOutdated: boolean
+  agentConnected: boolean
+  lastAgentCallAt: number
+  command: string
 }
 
 export interface SpaceLocation {
@@ -155,4 +169,6 @@ export const IPC = {
   settingsDns: 'settings:dns',
   settingsLocation: 'settings:location',
   openSettings: 'ui:open-settings',
+  integrationGet: 'integration:get',
+  integrationInstall: 'integration:install',
 } as const

@@ -27,6 +27,8 @@ type Handler = (ctx: Ctx) => Promise<unknown>
  */
 export class ControlServer {
   private spaceRoutes: Record<string, Handler>
+  /** when an agent last called us: Settings uses it to show whether anything is driving Iris */
+  lastAgentCallAt = 0
 
   constructor(
     private manager: SpaceManager,
@@ -55,6 +57,7 @@ export class ControlServer {
       const parts = url.pathname.split('/').filter(Boolean)
       const method = req.method ?? 'GET'
       const body = await readBody(req)
+      if (parts[0] !== 'health') this.lastAgentCallAt = Date.now()
 
       const root = await this.handleRoot(parts, method, body, url.searchParams)
       if (root) return json(res, root.status, root.payload)

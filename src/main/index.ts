@@ -7,6 +7,7 @@ import { Engine } from './engine/Engine'
 import { ControlServer } from './ControlServer'
 import { Memory } from './Memory'
 import { Settings } from './Settings'
+import { Integration } from './Integration'
 import { IPC, type PersistedState } from '../shared/types'
 import { runtimeDir, runtimeFile, type RuntimeHandshake } from '../shared/runtime'
 
@@ -24,6 +25,8 @@ let manager: SpaceManager
 let engine: Engine
 let memory: Memory
 let settings: Settings
+let integration: Integration
+let control: ControlServer
 let mainWindow: BrowserWindow
 
 function createWindow(): void {
@@ -144,6 +147,8 @@ function wireIpc(): void {
   ipcMain.handle(IPC.memoryForget, (_e, id: string) => memory.forget(id))
   ipcMain.handle(IPC.uiOverlay, (_e, on: boolean) => manager.setOverlay(on))
   ipcMain.handle(IPC.settingsGet, () => settings.all())
+  ipcMain.handle(IPC.integrationGet, () => integration.status(control?.lastAgentCallAt ?? 0))
+  ipcMain.handle(IPC.integrationInstall, () => integration.install())
   ipcMain.handle(IPC.settingsDns, (_e, mode: 'system' | 'google' | 'cloudflare') => settings.setDns(mode))
   ipcMain.handle(IPC.settingsLocation, async (_e, spaceId: string, location) => {
     settings.setLocation(spaceId, location)
@@ -186,12 +191,13 @@ app.whenReady().then(async () => {
   engine = new Engine(CDP_PORT)
   memory = new Memory()
   settings = new Settings()
+  integration = new Integration()
   settings.applyDns()
   wireIpc()
   createWindow()
   await engine.connect().catch((e) => console.error('[iris] engine connect failed:', e.message))
 
-  const control = new ControlServer(manager, engine, memory)
+  control = new ControlServer(manager, engine, memory)
   const controlPort = await control.listen()
   writeHandshake(controlPort)
   console.log(`[iris] control server on 127.0.0.1:${controlPort}, CDP on ${CDP_PORT}`)

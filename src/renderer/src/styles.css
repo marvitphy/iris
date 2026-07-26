@@ -213,13 +213,92 @@ html, body, #root {
 .setlabel { font-size: 13px; font-weight: 600; color: var(--fg); }
 .sethint { font-size: 12px; color: var(--muted); margin: 4px 0 10px; line-height: 1.45; }
 .setselect {
-  width: 100%; height: 34px; padding: 0 10px;
-  border: 1px solid var(--line); border-radius: 8px;
-  background: #0d0c11; color: var(--fg); font-size: 12.5px; font-family: inherit; outline: none;
+  width: 100%; height: 36px; padding: 0 38px 0 12px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background-color: #0d0c11; color: var(--fg); font-size: 12.5px; font-family: inherit; outline: none;
   cursor: pointer;
+  /* custom chevron with real breathing room, instead of the cramped native one */
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239c9ca8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  transition: border-color 0.12s, background-color 0.12s;
 }
+.setselect:hover { background-color: #131118; }
 .setselect:focus { border-color: rgba(176, 107, 255, 0.5); }
 .setselect:disabled { opacity: 0.5; cursor: default; }
+.setselect option { background: #131118; color: var(--fg); }
+
+/* custom select (the native dropdown can't be styled and looks foreign in this window) */
+.sel { position: relative; }
+.sel-trigger {
+  width: 100%; height: 36px; padding: 0 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: #0d0c11; color: var(--fg); font-size: 12.5px; font-family: inherit;
+  cursor: pointer; text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+.sel-trigger:hover { background: #131118; }
+.sel-trigger.open { border-color: rgba(176, 107, 255, 0.5); background: #131118; }
+.sel-trigger:disabled { opacity: 0.5; cursor: default; }
+.sel-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-note { color: var(--faint); margin-left: 8px; font-size: 11.5px; }
+.sel-chevron { flex: 0 0 auto; width: 13px; height: 13px; color: var(--muted); transition: transform 0.15s ease; }
+.sel-trigger.open .sel-chevron { transform: rotate(180deg); }
+
+.sel-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 60;
+  padding: 5px; border-radius: 10px;
+  background: #17151d; border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  max-height: 260px; overflow-y: auto;
+  animation: selIn 0.13s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes selIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.sel-option {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 8px 9px; border: none; border-radius: 7px; background: transparent;
+  color: var(--muted); font-size: 12.5px; font-family: inherit; text-align: left; cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.sel-option:hover { background: rgba(255, 255, 255, 0.07); color: var(--fg); }
+.sel-option.selected { color: var(--fg); }
+.sel-optmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sel-optlabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-optnote { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-tick { flex: 0 0 auto; width: 14px; height: 14px; color: var(--agent); }
+
+/* settings rows, checks and actions */
+.setrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.setbtn {
+  height: 30px; padding: 0 13px; border: none; border-radius: 8px; cursor: pointer;
+  background: var(--agent); color: #180a24; font-size: 12px; font-weight: 600;
+  transition: filter 0.12s, background 0.12s;
+}
+.setbtn:hover { filter: brightness(1.08); }
+.setbtn:disabled { opacity: 0.55; cursor: default; }
+.setbtn.ghost { background: rgba(255, 255, 255, 0.08); color: var(--fg); font-weight: 500; }
+.setbtn.ghost:hover { background: rgba(255, 255, 255, 0.14); filter: none; }
+
+.checks { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.check { display: flex; align-items: center; gap: 10px; padding: 7px 2px; }
+.checkdot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; }
+.checkdot.on { background: #58d19b; box-shadow: 0 0 8px rgba(88, 209, 155, 0.5); }
+.checkdot.off { background: #ffb050; }
+.checkmain { flex: 1; min-width: 0; }
+.checklabel { font-size: 12.5px; color: var(--fg); }
+.checkdetail { font-size: 11.5px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.setcmd {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  padding: 8px 8px 8px 12px; border-radius: 9px;
+  background: #08070b; border: 1px solid var(--line);
+}
+.setcmd code {
+  flex: 1; min-width: 0; font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px;
+  color: #d9d5e0; overflow-x: auto; white-space: nowrap;
+}
 
 .tb-main {
   flex: 1; height: 100%;
